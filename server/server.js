@@ -57,7 +57,12 @@ function applyInventoryItems(items) {
       return;
     }
     const result = db.applyInventoryLine(
-      { name, quantity: qty, unitCost: entry.unitCost ? Number(entry.unitCost) : null },
+      {
+        name,
+        quantity: qty,
+        unitCost: entry.unitCost ? Number(entry.unitCost) : null,
+        unit: entry.unit ? String(entry.unit).trim() : null,
+      },
       dateStr(TODAY)
     );
     applied.push(result);

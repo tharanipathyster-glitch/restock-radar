@@ -79,9 +79,9 @@ key at all, so the app is fully testable either way.
 `GET /api/retail/report.xlsx` (the "Download Excel report" button on the
 Reports tab) builds a workbook fresh from the current database:
 
-- **Products sheet** — Item, Stocked, Cost/Unit, Restock Time, Last Restock
-  Date, Current Stock, % Stock at Store, Restock Threshold, Alert — one row
-  per product, mirroring the spec's Output.xlsx layout.
+- **Products sheet** — Item, Unit, Stocked, Cost/Unit, Restock Time, Last
+  Restock Date, Current Stock, % Stock at Store, Restock Threshold, Alert —
+  one row per product, mirroring the spec's Output.xlsx layout.
 - **Detail sheet** — each product's Last 5 Days dates + quantities sold,
   and its 30-day weekday-average sold, stacked per product.
 
@@ -91,23 +91,27 @@ back at even if you don't download it right away.
 
 ## Test data
 
-| Item | Initial stock (lbs) | Total cost | Restock time |
-|---|---|---|---|
-| Tomatoes | 100 | $117 | 1 week |
-| Onions | 120 | $239 | 2 weeks |
-| Chillis | 140 | $229 | 3 weeks |
-| Toor Dhal | 500 | $180 | 4 weeks |
-| Sona Masuri Rice | 1000 | $235 | 5 weeks |
-| Ghee | 50 | $296 | 6 weeks |
-| Mustard Oil | 50 | $164 | 7 weeks |
-| Parle G Biscuits | 10 | $163 | 8 weeks |
-| Amul Paneer | 141 | $216 | 9 weeks |
-| Bitter Gourd | 253 | $222 | 10 weeks |
-| Capsicum | 271 | $194 | 11 weeks |
-| Chilli Powder | 219 | $191 | 12 weeks |
+| Item | Unit | Initial stock | Total cost | Restock time |
+|---|---|---|---|---|
+| Tomatoes | lb | 100 | $117 | 1 week |
+| Onions | lb | 120 | $239 | 2 weeks |
+| Chillis | lb | 140 | $229 | 3 weeks |
+| Toor Dhal | lb | 500 | $180 | 4 weeks |
+| Sona Masuri Rice | lb | 1000 | $235 | 5 weeks |
+| Ghee | tin | 50 | $296 | 6 weeks |
+| Mustard Oil | bottle | 50 | $164 | 7 weeks |
+| Parle G Biscuits | pack | 10 | $163 | 8 weeks |
+| Amul Paneer | pack | 141 | $216 | 9 weeks |
+| Bitter Gourd | lb | 253 | $222 | 10 weeks |
+| Capsicum | lb | 271 | $194 | 11 weeks |
+| Chilli Powder | lb | 219 | $191 | 12 weeks |
 
-Per-unit cost is derived as `totalCost / quantity`. Restock lead time is
-converted to days (`weeks × 7`) for the tentative-restock-date math.
+Every quantity in the app — stock on hand, quantities sold, restock amounts —
+is counted in that product's own **stocking unit** (shown next to the number
+everywhere), so "10" reads as "10 pack" for biscuits and "100 lb" for
+tomatoes, never an ambiguous bare count. Per-unit cost is derived as
+`totalCost / quantity`. Restock lead time is converted to days (`weeks × 7`)
+for the tentative-restock-date math.
 
 ## API
 
@@ -119,7 +123,7 @@ converted to days (`weeks × 7`) for the tentative-restock-date math.
 - `GET /api/retail/transactions` — recent recorded sales (manual, uploaded bill, or seed history)
 - `POST /api/retail/sales` — body `{ items: [{ id, quantitySold }] }` — manual sale entry (decreases stock)
 - `POST /api/retail/upload-bill` — body shaped like `mock-billing-export.json` — bulk sale entry from a bill (decreases stock)
-- `POST /api/retail/upload-inventory` — body `{ items: [{ item, quantity, unitCost? }] }` — structured restock, no AI needed (increases stock, can create new products)
+- `POST /api/retail/upload-inventory` — body `{ items: [{ item, quantity, unitCost?, unit? }] }` — structured restock, no AI needed (increases stock, can create new products; `unit` sets the stocking unit for a newly-created product, default `lb`)
 - `POST /api/retail/upload-inventory-llm` — body `{ text }` or `{ imageBase64 }` — same as above but the line items are read from free-form bill text/image by an LLM (needs `OPENAI_API_KEY`)
 - `GET /api/retail/report.xlsx` — downloads the Excel report described above
 - `POST /api/retail/reset` — wipes and reseeds the database back to the 12 starting products

@@ -51,9 +51,15 @@ async function getJSON(url) {
   try {
     res = await fetch(fullUrl);
   } catch (err) {
-    throw new Error("Couldn't reach the server. Check the Settings screen for the correct server address.");
+    const e = new Error("Couldn't reach the server. Check the Settings screen for the correct server address.");
+    e.isNetwork = true;
+    throw e;
   }
-  if (!res.ok) throw new Error(`Server returned an error (${res.status}).`);
+  if (!res.ok) {
+    const e = new Error(`Server returned an error (${res.status}).`);
+    e.isNetwork = true;
+    throw e;
+  }
   const data = await res.json();
   state.cache[fullUrl] = data;
   return data;
@@ -120,7 +126,23 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function barRow({ id, name, sub, pctStock, alertLevel, alertLabel }) {
+// `num` — tolerate a missing / non-numeric field instead of throwing on
+// .toFixed and blanking the whole screen.
+function num(v, d = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+
+// A quantity always carries its unit so a bare number is never ambiguous:
+// "84.6 lb", "8 pack", "22 bottle".
+function qty(value, unit) {
+  const n = num(value);
+  const rounded = Math.round(n * 10) / 10;
+  return `${rounded} ${unit || "unit"}`;
+}
+
+function barRow({ id, name, sub, pctStock, currentStock, stocked, unit, alertLevel, alertLabel }) {
+  const pct = num(pctStock);
   return `
     <div class="row-card" data-open="product:${id}">
       <div class="row-top">
@@ -130,9 +152,10 @@ function barRow({ id, name, sub, pctStock, alertLevel, alertLabel }) {
         </div>
         <span class="pill ${alertLevel}">${alertLabel}</span>
       </div>
-      <div class="bar-track"><div class="bar-fill ${alertLevel}" style="width:${Math.min(100, Math.max(2, pctStock))}%"></div></div>
+      <div class="bar-track"><div class="bar-fill ${alertLevel}" style="width:${Math.min(100, Math.max(2, pct))}%"></div></div>
       <div class="row-meta">
-        <span>${pctStock.toFixed(0)}% of stocked baseline</span>
+        <span>${qty(currentStock, unit)} on hand of ${qty(stocked, unit)}</span>
+        <span>${pct.toFixed(0)}%</span>
       </div>
     </div>`;
 }
@@ -198,7 +221,7 @@ async function renderAlerts() {
           <span class="pill critical">Restock Needed</span>
         </div>
         <div class="alert-detail">
-          <b>${a.pctStock.toFixed(0)}%</b> of stocked baseline remaining (${a.currentStock} of ${a.stocked} ${a.unit}) — threshold is ${(a.thresholdPct * 100).toFixed(0)}%
+          <b>${num(a.pctStock).toFixed(0)}%</b> of stocked baseline remaining (${qty(a.currentStock, a.unit)} of ${qty(a.stocked, a.unit)}) — threshold is ${(num(a.thresholdPct) * 100).toFixed(0)}%
         </div>
       </div>`
     )
@@ -209,6 +232,7 @@ async function renderAlerts() {
 async function renderProducts() {
   screenEl.innerHTML = `
     <div class="section-header"><h2>Products</h2><span class="sub" id="prodCount"></span></div>
+    <p class="footnote" style="padding:0 16px 10px">Every quantity is in that product's own stocking unit — <b>lb</b> for loose goods, <b>pack</b>/<b>tin</b>/<b>bottle</b> for counted goods.</p>
     <div class="list" id="prodList"><div class="loading">Loading…</div></div>`;
   const products = await getJSON("/api/retail/products");
   document.getElementById("prodCount").textContent = `${products.length} tracked`;
@@ -218,8 +242,11 @@ async function renderProducts() {
       barRow({
         id: p.id,
         name: p.name,
-        sub: `$${p.unitCost.toFixed(2)}/${p.unit} · restock takes ${p.restockLeadDays}d · threshold ${(p.thresholdPct * 100).toFixed(0)}%`,
+        sub: `$${num(p.unitCost).toFixed(2)} per ${p.unit || "unit"} · restock takes ${num(p.restockLeadDays)}d · threshold ${(num(p.thresholdPct) * 100).toFixed(0)}%`,
         pctStock: p.pctStock,
+        currentStock: p.currentStock,
+        stocked: p.stocked,
+        unit: p.unit,
         alertLevel: p.alertLevel,
         alertLabel: p.alertLabel,
       })
@@ -238,28 +265,28 @@ async function renderProductDetail(id) {
     <div class="detail-body">
       <div class="banner ${p.alertLevel}">
         <span class="emoji">${p.alertLevel === "critical" ? "🚨" : "✅"}</span>
-        <div>${p.alertLabel} — currently <b>${p.pctStock.toFixed(0)}%</b> of the ${p.stocked} ${p.unit} stocked baseline, threshold is ${(p.thresholdPct * 100).toFixed(0)}%.</div>
+        <div>${p.alertLabel} — currently <b>${num(p.pctStock).toFixed(0)}%</b> of the ${qty(p.stocked, p.unit)} stocked baseline, threshold is ${(num(p.thresholdPct) * 100).toFixed(0)}%.</div>
       </div>
       <div class="card">
         <h3>Stock level</h3>
         <div class="big-bar-track">
-          <div class="big-bar-fill ${p.alertLevel}" style="width:${Math.min(100, Math.max(6, p.pctStock))}%">${p.pctStock.toFixed(0)}%</div>
+          <div class="big-bar-fill ${p.alertLevel}" style="width:${Math.min(100, Math.max(6, num(p.pctStock)))}%">${num(p.pctStock).toFixed(0)}%</div>
         </div>
-        <div class="stock-caption"><span>${p.currentStock} ${p.unit} on hand</span><span>stocked ${p.stocked} ${p.unit}</span></div>
+        <div class="stock-caption"><span>${qty(p.currentStock, p.unit)} on hand</span><span>stocked ${qty(p.stocked, p.unit)}</span></div>
       </div>
       <div class="card">
         <h3>Restock threshold</h3>
         <p class="footnote" style="margin-top:0; padding:0 0 8px">Alert flips to "Restock Needed" once % stock at store drops below this.</p>
         <div style="display:flex; align-items:center; gap:10px">
-          <input id="thresholdInput" type="number" min="0" max="100" step="1" value="${Math.round(p.thresholdPct * 100)}" style="width:80px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); font-size:15px" />
+          <input id="thresholdInput" type="number" min="0" max="100" step="1" value="${Math.round(num(p.thresholdPct) * 100)}" style="width:80px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); font-size:15px" />
           <span>%</span>
           <button id="saveThresholdBtn" class="btn-primary">Save</button>
         </div>
         <div id="thresholdStatus" class="footnote" style="margin-top:8px"></div>
       </div>
       <div class="stat-grid">
-        <div class="stat-box"><div class="label">Cost per ${p.unit}</div><div class="value">$${p.unitCost.toFixed(2)}</div></div>
-        <div class="stat-box"><div class="label">Restock lead time</div><div class="value">${p.restockLeadDays}d</div></div>
+        <div class="stat-box"><div class="label">Cost per ${p.unit || "unit"}</div><div class="value">$${num(p.unitCost).toFixed(2)}</div></div>
+        <div class="stat-box"><div class="label">Restock lead time</div><div class="value">${num(p.restockLeadDays)}d</div></div>
       </div>
       <div class="card">
         <h3>Last 5 days — quantity sold</h3>
@@ -335,9 +362,9 @@ async function renderRecordSale() {
       <div class="qty-row">
         <div class="qty-row-label">
           <div class="row-name">${p.name}</div>
-          <div class="row-cat">${p.currentStock} ${p.unit} on hand</div>
+          <div class="row-cat">${qty(p.currentStock, p.unit)} on hand</div>
         </div>
-        <input type="number" min="0" step="0.1" placeholder="0" class="qty-input" data-id="${p.id}" />
+        <input type="number" min="0" step="0.1" placeholder="0" class="qty-input" data-id="${p.id}" title="quantity sold in ${p.unit || "units"}" />
       </div>`
     )
     .join("");
@@ -524,14 +551,25 @@ function renderSettings() {
 }
 
 function renderConnectionError(err) {
+  const isNetwork = Boolean(err && err.isNetwork);
+  const message = err && err.message ? err.message : "Something went wrong loading this screen.";
+  if (!isNetwork && err) console.error("Restock Radar render error:", err);
   screenEl.innerHTML = `
-    <div class="section-header"><h2>Can't load data</h2></div>
+    <div class="section-header"><h2>${isNetwork ? "Can't load data" : "Something went wrong"}</h2></div>
     <div class="empty-state">
-      <div class="big">📡</div>
-      ${err && err.message ? err.message : "Something went wrong talking to the server."}
-      <div style="margin-top:16px"><button id="goSettingsBtn" class="btn-secondary">Open Settings</button></div>
+      <div class="big">${isNetwork ? "📡" : "⚠️"}</div>
+      ${message}
+      <div style="margin-top:16px; display:flex; gap:10px; justify-content:center">
+        <button id="retryBtn" class="btn-primary">Retry</button>
+        ${isNetwork ? `<button id="goSettingsBtn" class="btn-secondary">Open Settings</button>` : ""}
+      </div>
     </div>`;
-  document.getElementById("goSettingsBtn").addEventListener("click", () => openDetail("settings", null));
+  document.getElementById("retryBtn").addEventListener("click", () => {
+    state.cache = {};
+    render();
+  });
+  const settingsBtn = document.getElementById("goSettingsBtn");
+  if (settingsBtn) settingsBtn.addEventListener("click", () => openDetail("settings", null));
 }
 
 // --------------------------------------------------------------- MAIN -----

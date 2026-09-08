@@ -99,14 +99,14 @@ function insertSaleRow(productId, date, quantitySold, source, billId) {
 
 // Applies a received-inventory line: bumps stocked + currentStock, resets lastRestockDate.
 // Creates the product if it doesn't exist yet (dynamic catalog from LLM-read bills).
-function applyInventoryLine({ name, quantity, unitCost, restockLeadDays }, date) {
+function applyInventoryLine({ name, quantity, unitCost, unit, restockLeadDays }, date) {
   let product = findProductByName(name);
   if (!product) {
     const id = nextId();
     insertProduct({
       id,
       name,
-      unit: "lb",
+      unit: unit || "lb",
       stocked: quantity,
       currentStock: quantity,
       unitCost: unitCost || 0,

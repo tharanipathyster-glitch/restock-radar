@@ -11,19 +11,28 @@ const db = require("./db");
 
 const TODAY = new Date("2026-09-08"); // fixed "today" so the demo is reproducible
 
+// `unit` is the stocking unit every quantity for that product is counted in —
+// weighed loose goods are "lb", counted goods are "pack"/"tin"/"bottle". It's
+// shown next to every number in the UI so "120" always reads as "120 lb" or
+// "10 pack", never an ambiguous bare count.
+// `startPct`, when set, forces this product's current stock to that fraction
+// of its stocked baseline on first launch — used to seed a realistic mix of
+// healthy stock and a few items already below their 50% restock threshold so
+// the Alerts tab has something to show from launch. Products without it get
+// the default "light depletion" (~85–98% remaining).
 const SEED_PRODUCTS = [
-  { name: "Tomatoes", quantity: 100, totalCost: 117, restockWeeks: 1, avgDaily: 3.2 },
-  { name: "Onions", quantity: 120, totalCost: 239, restockWeeks: 2, avgDaily: 2.4 },
-  { name: "Chillis", quantity: 140, totalCost: 229, restockWeeks: 3, avgDaily: 1.8 },
-  { name: "Toor Dhal", quantity: 500, totalCost: 180, restockWeeks: 4, avgDaily: 6.5 },
-  { name: "Sona Masuri Rice", quantity: 1000, totalCost: 235, restockWeeks: 5, avgDaily: 8.0 },
-  { name: "Ghee", quantity: 50, totalCost: 296, restockWeeks: 6, avgDaily: 0.9 },
-  { name: "Mustard Oil", quantity: 50, totalCost: 164, restockWeeks: 7, avgDaily: 0.8 },
-  { name: "Parle G Biscuits", quantity: 10, totalCost: 163, restockWeeks: 8, avgDaily: 0.3 },
-  { name: "Amul Paneer", quantity: 141, totalCost: 216, restockWeeks: 9, avgDaily: 2.6 },
-  { name: "Bitter Gourd", quantity: 253, totalCost: 222, restockWeeks: 10, avgDaily: 1.7 },
-  { name: "Capsicum", quantity: 271, totalCost: 194, restockWeeks: 11, avgDaily: 2.0 },
-  { name: "Chilli Powder", quantity: 219, totalCost: 191, restockWeeks: 12, avgDaily: 1.1 },
+  { name: "Tomatoes", unit: "lb", quantity: 100, totalCost: 117, restockWeeks: 1, avgDaily: 3.2, startPct: 0.34 },
+  { name: "Onions", unit: "lb", quantity: 120, totalCost: 239, restockWeeks: 2, avgDaily: 2.4 },
+  { name: "Chillis", unit: "lb", quantity: 140, totalCost: 229, restockWeeks: 3, avgDaily: 1.8, startPct: 0.46 },
+  { name: "Toor Dhal", unit: "lb", quantity: 500, totalCost: 180, restockWeeks: 4, avgDaily: 6.5 },
+  { name: "Sona Masuri Rice", unit: "lb", quantity: 1000, totalCost: 235, restockWeeks: 5, avgDaily: 8.0 },
+  { name: "Ghee", unit: "tin", quantity: 50, totalCost: 296, restockWeeks: 6, avgDaily: 1.4 },
+  { name: "Mustard Oil", unit: "bottle", quantity: 50, totalCost: 164, restockWeeks: 7, avgDaily: 1.3 },
+  { name: "Parle G Biscuits", unit: "pack", quantity: 10, totalCost: 163, restockWeeks: 8, avgDaily: 0.9, startPct: 0.3 },
+  { name: "Amul Paneer", unit: "pack", quantity: 141, totalCost: 216, restockWeeks: 9, avgDaily: 2.6 },
+  { name: "Bitter Gourd", unit: "lb", quantity: 253, totalCost: 222, restockWeeks: 10, avgDaily: 1.7 },
+  { name: "Capsicum", unit: "lb", quantity: 271, totalCost: 194, restockWeeks: 11, avgDaily: 2.0 },
+  { name: "Chilli Powder", unit: "lb", quantity: 219, totalCost: 191, restockWeeks: 12, avgDaily: 1.1 },
 ];
 
 function seededRandom(seed) {
@@ -55,6 +64,11 @@ function seedIfEmpty() {
     const id = `R${String(idx + 1).padStart(3, "0")}`;
     const unitCost = Math.round((p.totalCost / p.quantity) * 100) / 100;
 
+    // Counted goods (pack/tin/bottle) only make sense as whole numbers;
+    // weighed goods (lb) can carry a decimal.
+    const counted = p.unit && p.unit !== "lb";
+    const roundQty = (n) => (counted ? Math.round(n) : Math.round(n * 10) / 10);
+
     // 30 days of synthetic daily sales, ending yesterday (today has no sales yet).
     let totalSoldLast30 = 0;
     const dailyRows = [];
@@ -62,18 +76,20 @@ function seedIfEmpty() {
       const d = daysAgo(daysBack);
       const boost = WEEKDAY_BOOST[d.getDay()];
       const noise = 0.6 + rand() * 0.8;
-      const qty = Math.round(p.avgDaily * boost * noise * 10) / 10;
+      const qty = roundQty(p.avgDaily * boost * noise);
       if (qty > 0) dailyRows.push({ date: dateStr(d), qty });
       totalSoldLast30 += qty;
     }
 
     const stocked = p.quantity;
-    const currentStock = Math.max(0, Math.round((stocked - totalSoldLast30 * 0.15) * 10) / 10); // light depletion, not all products near threshold
+    const currentStock = Number.isFinite(p.startPct)
+      ? Math.max(0, roundQty(stocked * p.startPct))
+      : Math.max(0, roundQty(stocked - totalSoldLast30 * 0.15)); // light depletion, not all products near threshold
 
     db.insertProduct({
       id,
       name: p.name,
-      unit: "lb",
+      unit: p.unit || "lb",
       stocked,
       currentStock,
       unitCost,

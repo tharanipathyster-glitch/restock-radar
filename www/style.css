@@ -36,7 +36,9 @@ html, body {
   flex-direction: column;
   background: var(--bg);
   position: relative;
-  padding-bottom: 72px;
+  /* Room for the fixed bottom nav plus the phone's gesture bar / home
+     indicator, so the last list row is never hidden behind either. */
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ---- top bar ---- */
@@ -47,7 +49,11 @@ html, body {
   z-index: 20;
   background: var(--accent-dark);
   color: white;
-  padding: 14px 16px 14px;
+  /* Push the header clear of the phone status bar / notch / camera cutout.
+     env(safe-area-inset-top) is 0 in a normal browser, so this only adds
+     space where the OS actually reserves it. The extra 10px keeps the
+     title from sitting flush against the status bar even on flat displays. */
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px;
 }
 
 .topbar-row {
@@ -112,7 +118,9 @@ html, body {
   z-index: 20;
   background: var(--card);
   border-bottom: 1px solid var(--border);
-  padding: 10px 12px;
+  /* Same status-bar / notch clearance as .topbar — this bar also sticks to
+     the very top of the screen when a detail view is open. */
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
   display: flex;
   align-items: center;
   gap: 10px;

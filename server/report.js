@@ -21,6 +21,7 @@ function buildWorkbook(today) {
 
   const mainRows = products.map((p) => ({
     Item: p.name,
+    Unit: p.unit,
     Stocked: p.stocked,
     "Cost/Unit": p.unitCost,
     "Restock Time (days)": p.restockLeadDays,
