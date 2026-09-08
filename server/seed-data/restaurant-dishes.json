@@ -1,0 +1,72 @@
+[
+  {
+    "id": "D01",
+    "name": "Classic Cheeseburger",
+    "category": "Entree",
+    "price": 12.5,
+    "dailyVelocity": 19.29
+  },
+  {
+    "id": "D02",
+    "name": "Margherita Pizza",
+    "category": "Entree",
+    "price": 14,
+    "dailyVelocity": 15.43
+  },
+  {
+    "id": "D03",
+    "name": "Caesar Salad",
+    "category": "Salad",
+    "price": 9.5,
+    "dailyVelocity": 8.86
+  },
+  {
+    "id": "D04",
+    "name": "Grilled Chicken Sandwich",
+    "category": "Entree",
+    "price": 11.5,
+    "dailyVelocity": 14.86
+  },
+  {
+    "id": "D05",
+    "name": "Fish Tacos (3pc)",
+    "category": "Entree",
+    "price": 13,
+    "dailyVelocity": 8.64
+  },
+  {
+    "id": "D06",
+    "name": "Loaded Nachos",
+    "category": "Appetizer",
+    "price": 10,
+    "dailyVelocity": 9.29
+  },
+  {
+    "id": "D07",
+    "name": "Spaghetti & Meatballs",
+    "category": "Entree",
+    "price": 13.5,
+    "dailyVelocity": 9.36
+  },
+  {
+    "id": "D08",
+    "name": "French Fries (side)",
+    "category": "Side",
+    "price": 4.5,
+    "dailyVelocity": 28.93
+  },
+  {
+    "id": "D09",
+    "name": "Chocolate Lava Cake",
+    "category": "Dessert",
+    "price": 7,
+    "dailyVelocity": 8.93
+  },
+  {
+    "id": "D10",
+    "name": "Iced Tea",
+    "category": "Beverage",
+    "price": 3,
+    "dailyVelocity": 22.71
+  }
+]

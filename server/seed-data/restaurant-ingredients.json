@@ -1,0 +1,287 @@
+[
+  {
+    "id": "beef_patty",
+    "name": "Ground Beef Patties",
+    "unit": "each",
+    "parLevel": 400,
+    "currentStock": 323,
+    "lastRestockedDate": "2026-09-05",
+    "restockLeadDays": 2,
+    "costPerUnit": 1.1,
+    "dailyVelocity": 26.77,
+    "usedInDishes": [
+      "Classic Cheeseburger",
+      "Spaghetti & Meatballs"
+    ]
+  },
+  {
+    "id": "burger_bun",
+    "name": "Burger Buns",
+    "unit": "each",
+    "parLevel": 400,
+    "currentStock": 226,
+    "lastRestockedDate": "2026-09-03",
+    "restockLeadDays": 2,
+    "costPerUnit": 0.35,
+    "dailyVelocity": 34.14,
+    "usedInDishes": [
+      "Classic Cheeseburger",
+      "Grilled Chicken Sandwich"
+    ]
+  },
+  {
+    "id": "cheddar_slice",
+    "name": "Cheddar Slices",
+    "unit": "each",
+    "parLevel": 500,
+    "currentStock": 466,
+    "lastRestockedDate": "2026-09-07",
+    "restockLeadDays": 3,
+    "costPerUnit": 0.2,
+    "dailyVelocity": 37.86,
+    "usedInDishes": [
+      "Classic Cheeseburger",
+      "Loaded Nachos"
+    ]
+  },
+  {
+    "id": "lettuce",
+    "name": "Shredded Lettuce",
+    "unit": "lb",
+    "parLevel": 60,
+    "currentStock": 45.5,
+    "lastRestockedDate": "2026-08-30",
+    "restockLeadDays": 2,
+    "costPerUnit": 1.2,
+    "dailyVelocity": 1.71,
+    "usedInDishes": [
+      "Classic Cheeseburger",
+      "Grilled Chicken Sandwich"
+    ]
+  },
+  {
+    "id": "pizza_dough",
+    "name": "Pizza Dough Balls",
+    "unit": "each",
+    "parLevel": 250,
+    "currentStock": 226,
+    "lastRestockedDate": "2026-09-06",
+    "restockLeadDays": 2,
+    "costPerUnit": 0.9,
+    "dailyVelocity": 15.43,
+    "usedInDishes": [
+      "Margherita Pizza"
+    ]
+  },
+  {
+    "id": "mozzarella",
+    "name": "Shredded Mozzarella",
+    "unit": "lb",
+    "parLevel": 120,
+    "currentStock": 86.7,
+    "lastRestockedDate": "2026-09-01",
+    "restockLeadDays": 3,
+    "costPerUnit": 3.5,
+    "dailyVelocity": 4.63,
+    "usedInDishes": [
+      "Margherita Pizza"
+    ]
+  },
+  {
+    "id": "marinara",
+    "name": "Marinara Sauce",
+    "unit": "lb",
+    "parLevel": 100,
+    "currentStock": 71.6,
+    "lastRestockedDate": "2026-09-04",
+    "restockLeadDays": 3,
+    "costPerUnit": 1.8,
+    "dailyVelocity": 6.83,
+    "usedInDishes": [
+      "Margherita Pizza",
+      "Spaghetti & Meatballs"
+    ]
+  },
+  {
+    "id": "romaine",
+    "name": "Romaine Lettuce",
+    "unit": "lb",
+    "parLevel": 50,
+    "currentStock": 30.6,
+    "lastRestockedDate": "2026-08-28",
+    "restockLeadDays": 2,
+    "costPerUnit": 1.6,
+    "dailyVelocity": 1.77,
+    "usedInDishes": [
+      "Caesar Salad"
+    ]
+  },
+  {
+    "id": "parmesan",
+    "name": "Shredded Parmesan",
+    "unit": "lb",
+    "parLevel": 20,
+    "currentStock": 17.4,
+    "lastRestockedDate": "2026-09-02",
+    "restockLeadDays": 4,
+    "costPerUnit": 5.5,
+    "dailyVelocity": 0.44,
+    "usedInDishes": [
+      "Caesar Salad"
+    ]
+  },
+  {
+    "id": "caesar_dressing",
+    "name": "Caesar Dressing",
+    "unit": "gal",
+    "parLevel": 10,
+    "currentStock": 1.9,
+    "lastRestockedDate": "2026-08-30",
+    "restockLeadDays": 4,
+    "costPerUnit": 12,
+    "dailyVelocity": 0.89,
+    "usedInDishes": [
+      "Caesar Salad"
+    ]
+  },
+  {
+    "id": "chicken_breast",
+    "name": "Chicken Breast Portions",
+    "unit": "each",
+    "parLevel": 300,
+    "currentStock": 182,
+    "lastRestockedDate": "2026-08-31",
+    "restockLeadDays": 3,
+    "costPerUnit": 1.6,
+    "dailyVelocity": 14.86,
+    "usedInDishes": [
+      "Grilled Chicken Sandwich"
+    ]
+  },
+  {
+    "id": "tilapia",
+    "name": "Tilapia Fillets",
+    "unit": "lb",
+    "parLevel": 60,
+    "currentStock": 49,
+    "lastRestockedDate": "2026-09-05",
+    "restockLeadDays": 4,
+    "costPerUnit": 4.2,
+    "dailyVelocity": 4.32,
+    "usedInDishes": [
+      "Fish Tacos (3pc)"
+    ]
+  },
+  {
+    "id": "corn_tortilla",
+    "name": "Corn Tortillas",
+    "unit": "each",
+    "parLevel": 600,
+    "currentStock": 471,
+    "lastRestockedDate": "2026-09-03",
+    "restockLeadDays": 2,
+    "costPerUnit": 0.08,
+    "dailyVelocity": 25.93,
+    "usedInDishes": [
+      "Fish Tacos (3pc)"
+    ]
+  },
+  {
+    "id": "cabbage_slaw",
+    "name": "Cabbage Slaw Mix",
+    "unit": "lb",
+    "parLevel": 40,
+    "currentStock": 27,
+    "lastRestockedDate": "2026-08-29",
+    "restockLeadDays": 2,
+    "costPerUnit": 1,
+    "dailyVelocity": 1.3,
+    "usedInDishes": [
+      "Fish Tacos (3pc)"
+    ]
+  },
+  {
+    "id": "tortilla_chips",
+    "name": "Tortilla Chips",
+    "unit": "lb",
+    "parLevel": 80,
+    "currentStock": 74,
+    "lastRestockedDate": "2026-09-06",
+    "restockLeadDays": 4,
+    "costPerUnit": 1.4,
+    "dailyVelocity": 3.71,
+    "usedInDishes": [
+      "Loaded Nachos"
+    ]
+  },
+  {
+    "id": "jalapeno",
+    "name": "Sliced Jalapenos",
+    "unit": "lb",
+    "parLevel": 20,
+    "currentStock": 5.3,
+    "lastRestockedDate": "2026-08-23",
+    "restockLeadDays": 4,
+    "costPerUnit": 2.1,
+    "dailyVelocity": 0.93,
+    "usedInDishes": [
+      "Loaded Nachos"
+    ]
+  },
+  {
+    "id": "spaghetti",
+    "name": "Dry Spaghetti",
+    "unit": "lb",
+    "parLevel": 60,
+    "currentStock": 42,
+    "lastRestockedDate": "2026-09-04",
+    "restockLeadDays": 5,
+    "costPerUnit": 1.1,
+    "dailyVelocity": 4.68,
+    "usedInDishes": [
+      "Spaghetti & Meatballs"
+    ]
+  },
+  {
+    "id": "potato",
+    "name": "Frozen Fry Cut Potatoes",
+    "unit": "lb",
+    "parLevel": 200,
+    "currentStock": 0,
+    "lastRestockedDate": "2026-08-27",
+    "restockLeadDays": 4,
+    "costPerUnit": 0.9,
+    "dailyVelocity": 17.36,
+    "usedInDishes": [
+      "French Fries (side)"
+    ]
+  },
+  {
+    "id": "chocolate_cake_mix",
+    "name": "Lava Cake Batter Mix",
+    "unit": "lb",
+    "parLevel": 40,
+    "currentStock": 31.3,
+    "lastRestockedDate": "2026-09-05",
+    "restockLeadDays": 5,
+    "costPerUnit": 2.8,
+    "dailyVelocity": 2.68,
+    "usedInDishes": [
+      "Chocolate Lava Cake"
+    ]
+  },
+  {
+    "id": "tea_bags",
+    "name": "Iced Tea Bags",
+    "unit": "each",
+    "parLevel": 600,
+    "currentStock": 448,
+    "lastRestockedDate": "2026-09-01",
+    "restockLeadDays": 5,
+    "costPerUnit": 0.06,
+    "dailyVelocity": 22.71,
+    "usedInDishes": [
+      "Iced Tea"
+    ]
+  }
+]

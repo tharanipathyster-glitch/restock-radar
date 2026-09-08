@@ -1,0 +1,162 @@
+[
+  {
+    "dishId": "D01",
+    "dishName": "Classic Cheeseburger",
+    "ingredients": [
+      {
+        "ing": "beef_patty",
+        "qty": 1
+      },
+      {
+        "ing": "burger_bun",
+        "qty": 1
+      },
+      {
+        "ing": "cheddar_slice",
+        "qty": 1
+      },
+      {
+        "ing": "lettuce",
+        "qty": 0.05
+      }
+    ]
+  },
+  {
+    "dishId": "D02",
+    "dishName": "Margherita Pizza",
+    "ingredients": [
+      {
+        "ing": "pizza_dough",
+        "qty": 1
+      },
+      {
+        "ing": "mozzarella",
+        "qty": 0.3
+      },
+      {
+        "ing": "marinara",
+        "qty": 0.2
+      }
+    ]
+  },
+  {
+    "dishId": "D03",
+    "dishName": "Caesar Salad",
+    "ingredients": [
+      {
+        "ing": "romaine",
+        "qty": 0.2
+      },
+      {
+        "ing": "parmesan",
+        "qty": 0.05
+      },
+      {
+        "ing": "caesar_dressing",
+        "qty": 0.1
+      }
+    ]
+  },
+  {
+    "dishId": "D04",
+    "dishName": "Grilled Chicken Sandwich",
+    "ingredients": [
+      {
+        "ing": "chicken_breast",
+        "qty": 1
+      },
+      {
+        "ing": "burger_bun",
+        "qty": 1
+      },
+      {
+        "ing": "lettuce",
+        "qty": 0.05
+      }
+    ]
+  },
+  {
+    "dishId": "D05",
+    "dishName": "Fish Tacos (3pc)",
+    "ingredients": [
+      {
+        "ing": "tilapia",
+        "qty": 0.5
+      },
+      {
+        "ing": "corn_tortilla",
+        "qty": 3
+      },
+      {
+        "ing": "cabbage_slaw",
+        "qty": 0.15
+      }
+    ]
+  },
+  {
+    "dishId": "D06",
+    "dishName": "Loaded Nachos",
+    "ingredients": [
+      {
+        "ing": "tortilla_chips",
+        "qty": 0.4
+      },
+      {
+        "ing": "cheddar_slice",
+        "qty": 2
+      },
+      {
+        "ing": "jalapeno",
+        "qty": 0.1
+      }
+    ]
+  },
+  {
+    "dishId": "D07",
+    "dishName": "Spaghetti & Meatballs",
+    "ingredients": [
+      {
+        "ing": "spaghetti",
+        "qty": 0.5
+      },
+      {
+        "ing": "beef_patty",
+        "qty": 0.8
+      },
+      {
+        "ing": "marinara",
+        "qty": 0.4
+      }
+    ]
+  },
+  {
+    "dishId": "D08",
+    "dishName": "French Fries (side)",
+    "ingredients": [
+      {
+        "ing": "potato",
+        "qty": 0.6
+      }
+    ]
+  },
+  {
+    "dishId": "D09",
+    "dishName": "Chocolate Lava Cake",
+    "ingredients": [
+      {
+        "ing": "chocolate_cake_mix",
+        "qty": 0.3
+      }
+    ]
+  },
+  {
+    "dishId": "D10",
+    "dishName": "Iced Tea",
+    "ingredients": [
+      {
+        "ing": "tea_bags",
+        "qty": 1
+      }
+    ]
+  }
+]

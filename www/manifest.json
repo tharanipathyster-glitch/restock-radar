@@ -1,0 +1,9 @@
+{
+  "name": "Restock Radar",
+  "short_name": "Restock",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#144e82",
+  "description": "Sales velocity and restock alerts for retail and restaurant inventory"
+}
