@@ -1,0 +1,24 @@
+{
+  "name": "restock-radar",
+  "version": "1.0.0",
+  "description": "A phone-friendly prototype that reads sales history (standing in for a real POS export today) and tells an independent retailer or restaurant two things: **what's selling most**, and **what's about to run out and when to reorder it** — with an alert once something crosses 80% depleted. Built as a variant of Hardware Check's architecture (Express backend + static mobile-first frontend, real math over honestly-labeled seed data), split into two independent product lines because retail and restaurants are different data problems, not just different skins.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cap:sync": "cap sync",
+    "cap:android": "cap open android",
+    "cap:ios": "cap open ios"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/ios": "^8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1"
+  }
+}

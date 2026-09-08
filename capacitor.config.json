@@ -1,0 +1,9 @@
+{
+  "appId": "com.restockradar.app",
+  "appName": "Restock Radar",
+  "webDir": "www",
+  "backgroundColor": "#144e82",
+  "server": {
+    "androidScheme": "http"
+  }
+}

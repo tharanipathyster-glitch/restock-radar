@@ -11,14 +11,14 @@
     "name": "Margherita Pizza",
     "category": "Entree",
     "price": 14,
-    "dailyVelocity": 15.43
+    "dailyVelocity": 15.21
   },
   {
     "id": "D03",
     "name": "Caesar Salad",
     "category": "Salad",
     "price": 9.5,
-    "dailyVelocity": 8.86
+    "dailyVelocity": 8.93
   },
   {
     "id": "D04",
@@ -46,7 +46,7 @@
     "name": "Spaghetti & Meatballs",
     "category": "Entree",
     "price": 13.5,
-    "dailyVelocity": 9.36
+    "dailyVelocity": 9.29
   },
   {
     "id": "D08",
@@ -60,13 +60,13 @@
     "name": "Chocolate Lava Cake",
     "category": "Dessert",
     "price": 7,
-    "dailyVelocity": 8.93
+    "dailyVelocity": 8.86
   },
   {
     "id": "D10",
     "name": "Iced Tea",
     "category": "Beverage",
     "price": 3,
-    "dailyVelocity": 22.71
+    "dailyVelocity": 22.57
   }
 ]

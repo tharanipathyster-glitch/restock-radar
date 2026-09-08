@@ -16,6 +16,25 @@ const state = {
 const screenEl = document.getElementById("screen");
 const navEl = document.getElementById("bottomNav");
 const modeToggleEl = document.getElementById("modeToggle");
+const settingsBtnEl = document.getElementById("settingsBtn");
+
+// Native app shells (Capacitor on Android/iOS) load this page from a
+// bundled file:// / capacitor:// origin, so relative /api/... calls can't
+// reach the Express backend the way they can on the web build. The base
+// URL below lets a device point at wherever the backend is actually
+// running (a LAN IP while testing, a real host once deployed).
+function apiBase() {
+  const saved = localStorage.getItem("restockApiBase");
+  if (saved !== null) return saved.replace(/\/$/, "");
+  // No saved setting yet: native builds fall back to localhost:3001, which
+  // works out of the box when testing over USB with `adb reverse tcp:3001
+  // tcp:3001`. Override this from the in-app Settings screen for anything
+  // else (LAN IP, a real deployed host, etc).
+  return isNative ? "http://localhost:3001" : "";
+}
+const isNative = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+settingsBtnEl.addEventListener("click", () => openDetail("settings", null));
 
 modeToggleEl.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-mode]");
@@ -51,10 +70,17 @@ function closeDetail() {
 }
 
 async function getJSON(url) {
-  if (state.cache[url]) return state.cache[url];
-  const res = await fetch(url);
+  const fullUrl = url.startsWith("/api") ? apiBase() + url : url;
+  if (state.cache[fullUrl]) return state.cache[fullUrl];
+  let res;
+  try {
+    res = await fetch(fullUrl);
+  } catch (err) {
+    throw new Error("Couldn't reach the server. Check the Settings screen for the correct server address.");
+  }
+  if (!res.ok) throw new Error(`Server returned an error (${res.status}).`);
   const data = await res.json();
-  state.cache[url] = data;
+  state.cache[fullUrl] = data;
   return data;
 }
 
@@ -90,17 +116,19 @@ function renderNav() {
 
   // Alert count badge
   const alertUrl = state.mode === "retail" ? "/api/retail/alerts" : "/api/restaurant/alerts";
-  getJSON(alertUrl).then((alerts) => {
-    const badge = navEl.querySelector('[data-badge="alerts"]');
-    if (!badge) return;
-    const criticalCount = alerts.filter((a) => a.alertLevel === "critical").length;
-    if (criticalCount > 0) {
-      badge.hidden = false;
-      badge.textContent = criticalCount;
-    } else {
-      badge.hidden = true;
-    }
-  });
+  getJSON(alertUrl)
+    .then((alerts) => {
+      const badge = navEl.querySelector('[data-badge="alerts"]');
+      if (!badge) return;
+      const criticalCount = alerts.filter((a) => a.alertLevel === "critical").length;
+      if (criticalCount > 0) {
+        badge.hidden = false;
+        badge.textContent = criticalCount;
+      } else {
+        badge.hidden = true;
+      }
+    })
+    .catch(() => {});
 }
 
 // -------------------------------------------------------------- HELPERS ---
@@ -211,9 +239,10 @@ async function renderAlerts(url, emptyLabel) {
 
 async function renderRetailProducts() {
   screenEl.innerHTML = `
-    <div class="section-header"><h2>Products</h2><span class="sub">18 tracked</span></div>
+    <div class="section-header"><h2>Products</h2><span class="sub" id="prodCount"></span></div>
     <div class="list" id="prodList"><div class="loading">Loading…</div></div>`;
   const products = await getJSON("/api/retail/products");
+  document.getElementById("prodCount").textContent = `${products.length} tracked`;
   const listEl = document.getElementById("prodList");
   listEl.innerHTML = products
     .map((p) =>
@@ -257,9 +286,10 @@ async function renderRestaurantDishes() {
 
 async function renderRestaurantIngredients() {
   screenEl.innerHTML = `
-    <div class="section-header"><h2>Ingredients</h2><span class="sub">20 tracked</span></div>
+    <div class="section-header"><h2>Ingredients</h2><span class="sub" id="ingCount"></span></div>
     <div class="list" id="ingList"><div class="loading">Loading…</div></div>`;
   const ingredients = await getJSON("/api/restaurant/ingredients");
+  document.getElementById("ingCount").textContent = `${ingredients.length} tracked`;
   const listEl = document.getElementById("ingList");
   listEl.innerHTML = ingredients
     .map((i) =>
@@ -394,25 +424,87 @@ async function renderDishDetail(id) {
   document.getElementById("backBtn").addEventListener("click", closeDetail);
 }
 
+// ------------------------------------------------------------- SETTINGS ---
+
+function renderSettings() {
+  const current = localStorage.getItem("restockApiBase") || "";
+  screenEl.innerHTML = `
+    <div class="detail-header"><button class="back-btn" id="backBtn">← Back</button><span class="title">Settings</span></div>
+    <div class="detail-body">
+      <div class="card">
+        <h3>Backend server address</h3>
+        <p class="footnote" style="margin-top:0">${
+          isNative
+            ? "Running as an installed app — defaults to http://localhost:3001 (works over USB with `adb reverse tcp:3001 tcp:3001`). Point this at your deployed backend URL to test from any network."
+            : "Running in a browser — leave blank to use this same site's /api routes. Only needed if the backend is hosted elsewhere."
+        }</p>
+        <input id="apiBaseInput" type="text" placeholder="http://192.168.1.20:3001" value="${current.replace(/"/g, "&quot;")}" style="width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid #ccc; font-size:15px; margin-top:8px" />
+        <div style="display:flex; gap:10px; margin-top:14px">
+          <button id="saveApiBase" class="pill ok" style="cursor:pointer; padding:10px 16px">Save</button>
+          <button id="testApiBase" class="pill watch" style="cursor:pointer; padding:10px 16px">Test connection</button>
+        </div>
+        <div id="apiBaseStatus" class="footnote" style="margin-top:10px"></div>
+      </div>
+      <div class="footnote">All data shown today comes from seeded sample data standing in for a real POS export — see README for what's real vs. placeholder.</div>
+    </div>`;
+  document.getElementById("backBtn").addEventListener("click", closeDetail);
+
+  const input = document.getElementById("apiBaseInput");
+  const statusEl = document.getElementById("apiBaseStatus");
+
+  document.getElementById("saveApiBase").onclick = () => {
+    localStorage.setItem("restockApiBase", input.value.trim());
+    state.cache = {};
+    statusEl.textContent = "Saved.";
+  };
+  document.getElementById("testApiBase").onclick = async () => {
+    statusEl.textContent = "Checking…";
+    const base = input.value.trim().replace(/\/$/, "");
+    try {
+      const res = await fetch(base + "/healthz");
+      const data = await res.json();
+      statusEl.textContent = data.ok ? "✅ Connected — server is reachable." : "⚠️ Server responded but reported an issue.";
+    } catch (err) {
+      statusEl.textContent = "❌ Couldn't reach that address from this device.";
+    }
+  };
+}
+
+function renderConnectionError(err) {
+  screenEl.innerHTML = `
+    <div class="section-header"><h2>Can't load data</h2></div>
+    <div class="empty-state">
+      <div class="big">📡</div>
+      ${err && err.message ? err.message : "Something went wrong talking to the server."}
+      <div style="margin-top:16px"><button id="goSettingsBtn" class="pill watch" style="cursor:pointer; padding:10px 16px">Open Settings</button></div>
+    </div>`;
+  document.getElementById("goSettingsBtn").addEventListener("click", () => openDetail("settings", null));
+}
+
 // --------------------------------------------------------------- MAIN -----
 
-function render() {
+async function render() {
   syncModeToggle();
   renderNav();
 
-  if (state.detail) {
-    if (state.detail.kind === "product") return renderProductDetail(state.detail.id);
-    if (state.detail.kind === "ingredient") return renderIngredientDetail(state.detail.id);
-    if (state.detail.kind === "dish") return renderDishDetail(state.detail.id);
-  }
+  try {
+    if (state.detail) {
+      if (state.detail.kind === "settings") return renderSettings();
+      if (state.detail.kind === "product") return await renderProductDetail(state.detail.id);
+      if (state.detail.kind === "ingredient") return await renderIngredientDetail(state.detail.id);
+      if (state.detail.kind === "dish") return await renderDishDetail(state.detail.id);
+    }
 
-  if (state.mode === "retail") {
-    if (state.tab === "alerts") return renderAlerts("/api/retail/alerts", "80%");
-    if (state.tab === "products") return renderRetailProducts();
-  } else {
-    if (state.tab === "alerts") return renderAlerts("/api/restaurant/alerts", "80%");
-    if (state.tab === "dishes") return renderRestaurantDishes();
-    if (state.tab === "ingredients") return renderRestaurantIngredients();
+    if (state.mode === "retail") {
+      if (state.tab === "alerts") return await renderAlerts("/api/retail/alerts", "80%");
+      if (state.tab === "products") return await renderRetailProducts();
+    } else {
+      if (state.tab === "alerts") return await renderAlerts("/api/restaurant/alerts", "80%");
+      if (state.tab === "dishes") return await renderRestaurantDishes();
+      if (state.tab === "ingredients") return await renderRestaurantIngredients();
+    }
+  } catch (err) {
+    renderConnectionError(err);
   }
 }
 

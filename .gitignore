@@ -1,2 +1,11 @@
 node_modules/
 *.log
+
+# Capacitor native build output
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/

@@ -4,11 +4,11 @@
     "name": "Ground Beef Patties",
     "unit": "each",
     "parLevel": 400,
-    "currentStock": 323,
+    "currentStock": 315.2,
     "lastRestockedDate": "2026-09-05",
     "restockLeadDays": 2,
     "costPerUnit": 1.1,
-    "dailyVelocity": 26.77,
+    "dailyVelocity": 26.71,
     "usedInDishes": [
       "Classic Cheeseburger",
       "Spaghetti & Meatballs"
@@ -19,7 +19,7 @@
     "name": "Burger Buns",
     "unit": "each",
     "parLevel": 400,
-    "currentStock": 226,
+    "currentStock": 224,
     "lastRestockedDate": "2026-09-03",
     "restockLeadDays": 2,
     "costPerUnit": 0.35,
@@ -49,7 +49,7 @@
     "name": "Shredded Lettuce",
     "unit": "lb",
     "parLevel": 60,
-    "currentStock": 45.5,
+    "currentStock": 44.9,
     "lastRestockedDate": "2026-08-30",
     "restockLeadDays": 2,
     "costPerUnit": 1.2,
@@ -64,11 +64,11 @@
     "name": "Pizza Dough Balls",
     "unit": "each",
     "parLevel": 250,
-    "currentStock": 226,
+    "currentStock": 220,
     "lastRestockedDate": "2026-09-06",
     "restockLeadDays": 2,
     "costPerUnit": 0.9,
-    "dailyVelocity": 15.43,
+    "dailyVelocity": 15.21,
     "usedInDishes": [
       "Margherita Pizza"
     ]
@@ -78,11 +78,11 @@
     "name": "Shredded Mozzarella",
     "unit": "lb",
     "parLevel": 120,
-    "currentStock": 86.7,
+    "currentStock": 87.3,
     "lastRestockedDate": "2026-09-01",
     "restockLeadDays": 3,
     "costPerUnit": 3.5,
-    "dailyVelocity": 4.63,
+    "dailyVelocity": 4.56,
     "usedInDishes": [
       "Margherita Pizza"
     ]
@@ -92,11 +92,11 @@
     "name": "Marinara Sauce",
     "unit": "lb",
     "parLevel": 100,
-    "currentStock": 71.6,
+    "currentStock": 72.4,
     "lastRestockedDate": "2026-09-04",
     "restockLeadDays": 3,
     "costPerUnit": 1.8,
-    "dailyVelocity": 6.83,
+    "dailyVelocity": 6.76,
     "usedInDishes": [
       "Margherita Pizza",
       "Spaghetti & Meatballs"
@@ -107,11 +107,11 @@
     "name": "Romaine Lettuce",
     "unit": "lb",
     "parLevel": 50,
-    "currentStock": 30.6,
+    "currentStock": 30.4,
     "lastRestockedDate": "2026-08-28",
     "restockLeadDays": 2,
     "costPerUnit": 1.6,
-    "dailyVelocity": 1.77,
+    "dailyVelocity": 1.79,
     "usedInDishes": [
       "Caesar Salad"
     ]
@@ -125,7 +125,7 @@
     "lastRestockedDate": "2026-09-02",
     "restockLeadDays": 4,
     "costPerUnit": 5.5,
-    "dailyVelocity": 0.44,
+    "dailyVelocity": 0.45,
     "usedInDishes": [
       "Caesar Salad"
     ]
@@ -135,7 +135,7 @@
     "name": "Caesar Dressing",
     "unit": "gal",
     "parLevel": 10,
-    "currentStock": 1.9,
+    "currentStock": 1.8,
     "lastRestockedDate": "2026-08-30",
     "restockLeadDays": 4,
     "costPerUnit": 12,
@@ -163,7 +163,7 @@
     "name": "Tilapia Fillets",
     "unit": "lb",
     "parLevel": 60,
-    "currentStock": 49,
+    "currentStock": 47,
     "lastRestockedDate": "2026-09-05",
     "restockLeadDays": 4,
     "costPerUnit": 4.2,
@@ -177,7 +177,7 @@
     "name": "Corn Tortillas",
     "unit": "each",
     "parLevel": 600,
-    "currentStock": 471,
+    "currentStock": 474,
     "lastRestockedDate": "2026-09-03",
     "restockLeadDays": 2,
     "costPerUnit": 0.08,
@@ -191,7 +191,7 @@
     "name": "Cabbage Slaw Mix",
     "unit": "lb",
     "parLevel": 40,
-    "currentStock": 27,
+    "currentStock": 26.4,
     "lastRestockedDate": "2026-08-29",
     "restockLeadDays": 2,
     "costPerUnit": 1,
@@ -205,7 +205,7 @@
     "name": "Tortilla Chips",
     "unit": "lb",
     "parLevel": 80,
-    "currentStock": 74,
+    "currentStock": 71.6,
     "lastRestockedDate": "2026-09-06",
     "restockLeadDays": 4,
     "costPerUnit": 1.4,
@@ -219,7 +219,7 @@
     "name": "Sliced Jalapenos",
     "unit": "lb",
     "parLevel": 20,
-    "currentStock": 5.3,
+    "currentStock": 4.9,
     "lastRestockedDate": "2026-08-23",
     "restockLeadDays": 4,
     "costPerUnit": 2.1,
@@ -233,11 +233,11 @@
     "name": "Dry Spaghetti",
     "unit": "lb",
     "parLevel": 60,
-    "currentStock": 42,
+    "currentStock": 42.5,
     "lastRestockedDate": "2026-09-04",
     "restockLeadDays": 5,
     "costPerUnit": 1.1,
-    "dailyVelocity": 4.68,
+    "dailyVelocity": 4.64,
     "usedInDishes": [
       "Spaghetti & Meatballs"
     ]
@@ -261,11 +261,11 @@
     "name": "Lava Cake Batter Mix",
     "unit": "lb",
     "parLevel": 40,
-    "currentStock": 31.3,
+    "currentStock": 29.8,
     "lastRestockedDate": "2026-09-05",
     "restockLeadDays": 5,
     "costPerUnit": 2.8,
-    "dailyVelocity": 2.68,
+    "dailyVelocity": 2.66,
     "usedInDishes": [
       "Chocolate Lava Cake"
     ]
@@ -275,11 +275,11 @@
     "name": "Iced Tea Bags",
     "unit": "each",
     "parLevel": 600,
-    "currentStock": 448,
+    "currentStock": 450,
     "lastRestockedDate": "2026-09-01",
     "restockLeadDays": 5,
     "costPerUnit": 0.06,
-    "dailyVelocity": 22.71,
+    "dailyVelocity": 22.57,
     "usedInDishes": [
       "Iced Tea"
     ]

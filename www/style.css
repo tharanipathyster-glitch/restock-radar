@@ -73,6 +73,25 @@ html, body {
   border-radius: 10px;
   padding: 3px;
   gap: 3px;
+  flex: 1;
+}
+
+.topbar-row {
+  display: flex;
+  align-items: center;
+}
+
+.settings-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 17px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 
 .mode-toggle button {

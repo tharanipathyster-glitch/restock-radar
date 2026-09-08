@@ -21,8 +21,101 @@ npm start         # serves the API + frontend on http://localhost:3001
 Open `http://localhost:3001` in a phone browser (or resize a desktop browser
 to phone width) — it's a single responsive page, no separate mobile build.
 "Add to Home Screen" will install it like an app via the included
-`manifest.json`; see **What a real phone app would still need** below for
-the gap between that and a true native app with push notifications.
+`manifest.json`.
+
+## Run it as a native Android / iOS app
+
+This repo is also wrapped with [Capacitor](https://capacitorjs.com/) so the
+same `www/` frontend ships as an installable native app on both platforms,
+instead of only a browser tab. The `android/` and `ios/` folders here are
+generated native projects (already added via `npx cap add android|ios`).
+
+Building the Android project from the command line needs **JDK 21**
+specifically (Capacitor 8's Android Gradle setup targets Java 21 —  newer
+JDKs like the JBR bundled with recent Android Studio builds are too new for
+this Gradle version, and JDK 17 is too old). Android Studio handles this
+automatically if you open the project there instead.
+
+```bash
+npm install          # installs @capacitor/* at the repo root
+npx cap sync         # copies www/ into both native projects + syncs plugins
+npm run cap:android  # opens the project in Android Studio
+npm run cap:ios      # opens the project in Xcode (macOS only)
+```
+
+From there, build/run onto a simulator, emulator, or a connected device the
+normal Android Studio / Xcode way (Run ▶). iOS builds require a Mac with
+Xcode installed — Capacitor's iOS project can be generated on any OS, but
+compiling and signing it needs Xcode's toolchain.
+
+**Important — pointing the app at a server:** a native app has no "same
+origin" server to fall back on the way a browser tab does, so the app can't
+assume `/api/...` means "this same host." Open the **⚙️ Settings** screen
+inside the app and enter the address where `server/server.js` is running
+(e.g. `http://192.168.1.20:3001` for a machine on the same Wi-Fi network as
+the phone, or a real deployed URL once this is hosted somewhere). Tap
+"Test connection" to confirm the phone can reach it, then "Save." The web
+build (opened directly in a browser) needs no configuration and keeps using
+relative `/api/...` calls automatically.
+
+Whenever `www/` changes, re-run `npx cap sync` before rebuilding the native
+apps so they pick up the latest frontend code.
+
+### Test the Android build on your own phone right now (fastest path)
+
+No Play Store, no APK signing needed for testing — this uses Android's
+built-in developer mode over USB:
+
+1. On the phone: Settings → About phone → tap "Build number" 7 times to
+   unlock Developer Options, then Settings → Developer Options → enable
+   "USB debugging."
+2. Plug the phone into this computer with a USB cable. Tap "Allow" on the
+   phone when the "Allow USB debugging?" prompt appears.
+3. From `android/`, forward the backend port over the USB connection so the
+   phone can reach it at `localhost:3001` regardless of Wi-Fi:
+   ```bash
+   adb reverse tcp:3001 tcp:3001
+   ```
+4. Build and install the debug APK:
+   ```bash
+   cd android
+   ./gradlew assembleDebug
+   adb install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+5. Make sure `server/server.js` is running (`npm start` in `server/`), then
+   open the "Restock Radar" app icon on the phone. It talks to
+   `http://localhost:3001` by default when installed as a native app — no
+   Settings screen changes needed for this USB-tethered setup.
+
+Re-run steps 4 whenever you change the frontend or backend code and want to
+test the update on the phone (step 3 only needs to be redone if the phone
+disconnects/reconnects).
+
+### Publishing to GitHub + hosting the backend publicly
+
+Two separate things need to happen for someone outside your Wi-Fi to use
+this: the **code** needs to be on GitHub, and the **backend** needs to run
+somewhere reachable from the internet — GitHub itself only stores code and
+doesn't run a Node server for you.
+
+1. **Push the code to GitHub:** open the Source Control panel in VS Code
+   (the branch icon in the left sidebar) and click **Publish to Branch** /
+   **Publish to GitHub**. Choose public or private, and let it create the
+   repo and push. (Requires a one-time VS Code window reload after
+   installing Git so the Source Control panel picks it up.)
+2. **Deploy the backend on Render.com** (free tier): sign in to
+   [render.com](https://render.com) with GitHub, click **New → Blueprint**,
+   pick this repo — Render will read the included `render.yaml` and deploy
+   `server/` automatically. Once deployed you'll get a public URL like
+   `https://restock-radar.onrender.com`.
+3. **Point the app at it:** open the **⚙️ Settings** screen in the app
+   (web or the installed native app), paste that Render URL in, tap
+   "Test connection," then "Save." Anyone using the app — on any network —
+   now hits the same live backend.
+
+Note: Render's free tier spins the service down after inactivity, so the
+first request after a while can take ~30-60s to wake it back up — expected
+on a free plan, not a bug.
 
 ## Who this is for
 
@@ -64,7 +157,7 @@ the same item it sells, while a restaurant sells a *dish* but restocks
 
 **Placeholder — simulated, not connected to anything live:**
 - **All sales history and current stock come from `generate-seed-data.js`**,
-  a seeded random-number script that invents 45 days of daily sales for 18
+  a seeded random-number script that invents 45 days of daily sales for 21
   grocery products and 10 restaurant dishes, then derives "current stock" as
   par level minus cumulative sales since a randomized last-restock date.
   This is a believable stand-in for a POS export, not real transactions.
@@ -73,16 +166,20 @@ the same item it sells, while a restaurant sells a *dish* but restocks
   the field-mapping step) and returns `null`. None of them call a real API.
   This is the same pattern as Hardware Check's `retailer-actors.js`: the
   wiring is there, the credentials and live calls are not.
-- Push notifications for the 80%-depleted alert: **not implemented.** A
-  phone browser (even installed via "Add to Home Screen") cannot send native
-  push notifications from a plain web app without a backend push service and
-  platform registration. Doing this for real means wrapping the app in
-  Capacitor (like Hardware Check's `android/` folder), adding the Capacitor
-  Push Notifications plugin, and registering with Firebase Cloud Messaging
-  (Android) and APNs (iOS) — none of which is achievable inside this
-  prototype without an actual app-store-style deployment and a real device
-  to test push delivery on. Today, "checking the Alerts tab" is the
-  notification.
+- Push notifications for the 80%-depleted alert: **not implemented.** The
+  app is now wrapped in Capacitor (`android/` and `ios/` folders) so it
+  installs and runs as a real native app rather than only a browser tab,
+  but native push still needs the Capacitor Push Notifications plugin plus
+  registering with Firebase Cloud Messaging (Android) and APNs (iOS) —
+  a real backend push service and a real device to test delivery on, not
+  achievable inside this prototype. Today, "checking the Alerts tab" (and
+  the red badge count on the nav bar) is the notification.
+- The native apps have no backend of their own bundled in — they're a
+  WebView shell pointed at wherever `server/server.js` happens to be
+  running (configurable from the in-app ⚙️ Settings screen). That's a
+  realistic shape for the real product too: the phone app talks to a
+  backend that does the actual POS integration, it doesn't run Node on
+  the device.
 
 ## The retail vs. restaurant data problem, explained
 
