@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Billing Terminal — Restock Radar</title>
+  <style>
+    :root {
+      --bg: #f6f4ee; --card: #fff; --ink: #2c2b27; --muted: #7c786d;
+      --border: #e7e2d4; --accent: #3a7d6f; --accent-dark: #2b5e54;
+      --accent-soft: #e4efec; --ok: #4c9a6a; --critical: #c96a56;
+      --radius: 14px; --shadow: 0 1px 3px rgba(60,50,30,.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    header {
+      background: var(--accent-dark); color: #fff;
+      padding: calc(env(safe-area-inset-top, 0px) + 16px) 18px 14px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    header h1 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+    header .tag { font-size: 11px; opacity: .8; font-weight: 600; }
+    header a { color: #cdeee4; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 14px; display: grid;
+      grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 760px) { .wrap { grid-template-columns: 1.4fr 1fr; align-items: start; } }
+    .panel { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 14px; }
+    .panel h2 { margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .panel .note { font-size: 11.5px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+    .prod {
+      border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
+      padding: 10px; text-align: left; cursor: pointer; font: inherit; color: inherit;
+      display: flex; flex-direction: column; gap: 3px; transition: border-color .1s;
+    }
+    .prod:hover { border-color: var(--accent); }
+    .prod:active { background: var(--accent-soft); }
+    .prod .n { font-weight: 700; font-size: 13px; line-height: 1.2; }
+    .prod .m { font-size: 11px; color: var(--muted); }
+    .prod .s { font-size: 10.5px; font-weight: 700; }
+    .prod .s.low { color: var(--critical); }
+    .prod .s.ok { color: var(--ok); }
+    .cart-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 24px 0; }
+    .line { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .line:last-of-type { border-bottom: none; }
+    .line .ln { flex: 1; min-width: 0; }
+    .line .ln .n { font-weight: 700; font-size: 13px; }
+    .line .ln .m { font-size: 11px; color: var(--muted); }
+    .qtybox { display: flex; align-items: center; gap: 4px; }
+    .qtybox button { width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--border);
+      background: var(--bg); font-size: 15px; font-weight: 800; cursor: pointer; color: var(--accent-dark); }
+    .qtybox input { width: 46px; text-align: center; padding: 5px 2px; border: 1px solid var(--border);
+      border-radius: 7px; font: inherit; font-size: 13px; }
+    .line .rm { border: none; background: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 4px; }
+    .totals { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0;
+      font-size: 15px; font-weight: 800; }
+    .totals .sub { font-size: 12px; color: var(--muted); font-weight: 600; }
+    button.primary { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 10px;
+      padding: 13px; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+    button.primary:disabled { opacity: .45; cursor: not-allowed; }
+    button.ghost { width: 100%; background: var(--accent-soft); color: var(--accent-dark); border: none;
+      border-radius: 10px; padding: 10px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 8px; }
+    .status { font-size: 12px; margin-top: 10px; line-height: 1.5; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--critical); }
+    .receipt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+      background: var(--bg); border: 1px dashed var(--border); border-radius: 10px; padding: 12px; white-space: pre-wrap; margin-top: 12px; }
+    .bill-id { font-size: 11px; color: var(--muted); font-weight: 700; }
+    .loading { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🧾 Billing Terminal</h1>
+      <div class="tag">mock POS — feeds sales into Restock Radar</div>
+    </div>
+    <a href="/">← Open Restock Radar</a>
+  </header>
+
+  <div class="wrap">
+    <div class="panel">
+      <h2>Ring up items</h2>
+      <p class="note">
+        This stands in for a real store billing/POS system. Tap a product to add it to the bill;
+        completing the sale posts the bill to Restock Radar's <code>/api/retail/upload-bill</code>
+        endpoint, which decreases stock exactly as a real POS integration would.
+      </p>
+      <div id="prodGrid" class="grid"><div class="loading">Loading products…</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Current bill <span id="billId" class="bill-id"></span></h2>
+      <div id="cart"><div class="cart-empty">No items yet — tap a product to start.</div></div>
+      <div class="totals" id="totals" hidden>
+        <span>Total<span class="sub" id="lineCount"></span></span>
+        <span id="grandTotal">$0.00</span>
+      </div>
+      <button class="primary" id="completeBtn" disabled>Complete sale &amp; send to Restock Radar</button>
+      <button class="ghost" id="clearBtn" hidden>Clear bill</button>
+      <div class="status" id="status"></div>
+      <div class="receipt" id="receipt" hidden></div>
+    </div>
+  </div>
+
+  <script>
+    // API base: same origin by default; override with ?api=https://host for
+    // running this terminal against a remote Restock Radar backend.
+    const API = (new URLSearchParams(location.search).get("api") || "").replace(/\/$/, "");
+    const api = (p) => (API || "") + p;
+
+    const state = { products: [], cart: new Map(), billId: newBillId() };
+
+    function newBillId() {
+      const d = new Date();
+      const stamp = d.toISOString().slice(0, 10).replace(/-/g, "");
+      return `POS-${stamp}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    }
+    function todayIso() { return new Date().toISOString().slice(0, 10); }
+    function money(n) { return "$" + (Math.round(n * 100) / 100).toFixed(2); }
+
+    async function loadProducts() {
+      const grid = document.getElementById("prodGrid");
+      try {
+        const res = await fetch(api("/api/retail/products"));
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        state.products = await res.json();
+      } catch (e) {
+        grid.innerHTML = `<div class="loading">Couldn't reach Restock Radar at <b>${API || location.origin}</b>.<br>Add <code>?api=https://your-backend</code> to the URL.</div>`;
+        return;
+      }
+      grid.innerHTML = state.products
+        .map((p) => {
+          const low = p.alertLevel === "critical";
+          return `<button class="prod" data-id="${p.id}">
+            <span class="n">${p.name}</span>
+            <span class="m">${money(p.unitCost)} / ${p.unit}</span>
+            <span class="s ${low ? "low" : "ok"}">${p.currentStock} ${p.unit} in stock</span>
+          </button>`;
+        })
+        .join("");
+      grid.querySelectorAll(".prod").forEach((b) =>
+        b.addEventListener("click", () => addToCart(b.dataset.id))
+      );
+    }
+
+    function addToCart(id) {
+      const cur = state.cart.get(id) || 0;
+      state.cart.set(id, cur + 1);
+      renderCart();
+    }
+    function setQty(id, q) {
+      q = Math.max(0, Math.round(q * 10) / 10);
+      if (!q) state.cart.delete(id);
+      else state.cart.set(id, q);
+      renderCart();
+    }
+
+    function renderCart() {
+      const cartEl = document.getElementById("cart");
+      const totalsEl = document.getElementById("totals");
+      const completeBtn = document.getElementById("completeBtn");
+      const clearBtn = document.getElementById("clearBtn");
+      document.getElementById("billId").textContent = state.billId;
+
+      if (!state.cart.size) {
+        cartEl.innerHTML = `<div class="cart-empty">No items yet — tap a product to start.</div>`;
+        totalsEl.hidden = true; completeBtn.disabled = true; clearBtn.hidden = true;
+        return;
+      }
+      let total = 0;
+      const rows = [];
+      state.cart.forEach((qty, id) => {
+        const p = state.products.find((x) => x.id === id);
+        if (!p) return;
+        const lineTotal = p.unitCost * qty;
+        total += lineTotal;
+        rows.push(`<div class="line" data-id="${id}">
+          <div class="ln"><div class="n">${p.name}</div><div class="m">${money(p.unitCost)}/${p.unit} · ${money(lineTotal)}</div></div>
+          <div class="qtybox">
+            <button data-act="dec">−</button>
+            <input type="number" min="0" step="0.1" value="${qty}" data-act="set" />
+            <button data-act="inc">+</button>
+          </div>
+          <button class="rm" data-act="rm" title="Remove">✕</button>
+        </div>`);
+      });
+      cartEl.innerHTML = rows.join("");
+      cartEl.querySelectorAll(".line").forEach((line) => {
+        const id = line.dataset.id;
+        const q = () => state.cart.get(id) || 0;
+        line.querySelector('[data-act="dec"]').onclick = () => setQty(id, q() - 1);
+        line.querySelector('[data-act="inc"]').onclick = () => setQty(id, q() + 1);
+        line.querySelector('[data-act="rm"]').onclick = () => setQty(id, 0);
+        line.querySelector('[data-act="set"]').onchange = (e) => setQty(id, parseFloat(e.target.value) || 0);
+      });
+      document.getElementById("grandTotal").textContent = money(total);
+      document.getElementById("lineCount").textContent = ` · ${state.cart.size} line${state.cart.size > 1 ? "s" : ""}`;
+      totalsEl.hidden = false; completeBtn.disabled = false; clearBtn.hidden = false;
+    }
+
+    function clearBill() {
+      state.cart.clear();
+      state.billId = newBillId();
+      document.getElementById("status").textContent = "";
+      document.getElementById("status").className = "status";
+      document.getElementById("receipt").hidden = true;
+      renderCart();
+    }
+
+    async function completeSale() {
+      const statusEl = document.getElementById("status");
+      const btn = document.getElementById("completeBtn");
+      const items = [];
+      state.cart.forEach((qty, id) => {
+        const p = state.products.find((x) => x.id === id);
+        if (p) items.push({ item: p.name, quantitySold: qty });
+      });
+      if (!items.length) return;
+
+      btn.disabled = true;
+      statusEl.className = "status";
+      statusEl.textContent = "Sending bill to Restock Radar…";
+      try {
+        const res = await fetch(api("/api/retail/upload-bill"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ billId: state.billId, date: todayIso(), items }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+
+        const applied = data.applied || [];
+        const unmatched = data.unmatched || [];
+        statusEl.className = "status ok";
+        statusEl.textContent = `✅ Sale recorded. ${applied.length} line(s) decreased stock in Restock Radar${unmatched.length ? ` (${unmatched.length} unmatched)` : ""}.`;
+
+        const total = applied.reduce((s, a) => {
+          const p = state.products.find((x) => x.name === a.name);
+          return s + (p ? p.unitCost * a.quantitySold : 0);
+        }, 0);
+        const lines = applied.map((a) => {
+          const p = state.products.find((x) => x.name === a.name);
+          return `${a.name.padEnd(22)} ${String(a.quantitySold).padStart(6)} ${p ? p.unit : ""}`;
+        });
+        const rc = document.getElementById("receipt");
+        rc.hidden = false;
+        rc.textContent =
+          `RESTOCK RADAR — MOCK POS\nBill: ${state.billId}\nDate: ${todayIso()}\n` +
+          `--------------------------------\n${lines.join("\n")}\n` +
+          `--------------------------------\nApprox total: ${money(total)}\n\nStock updated in Restock Radar ✓`;
+
+        state.cart.clear();
+        state.billId = newBillId();
+        await loadProducts();
+        renderCart();
+      } catch (e) {
+        statusEl.className = "status err";
+        statusEl.textContent = "❌ " + e.message;
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById("completeBtn").addEventListener("click", completeSale);
+    document.getElementById("clearBtn").addEventListener("click", clearBill);
+    loadProducts().then(renderCart);
+  </script>
+</body>
+</html>

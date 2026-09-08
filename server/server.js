@@ -19,11 +19,17 @@ const db = require("./db");
 const { seedIfEmpty, TODAY } = require("./seed");
 const { buildProductSummary, buildProductDetail, dateStr } = require("./analytics");
 const { parseBillWithLLM } = require("./llm-bill-parser");
-const { getDailyReportBuffer, getFreshReportBuffer } = require("./report");
+const {
+  getDailyReportBuffer,
+  getFreshReportBuffer,
+  listCachedReports,
+  getCachedReportByDate,
+} = require("./report");
 
 seedIfEmpty();
 
 const MOCK_BILL = require("./seed-data/mock-billing-export.json");
+const MOCK_INVENTORY = require("./seed-data/mock-inventory-received.json");
 
 const app = express();
 app.use(cors());
@@ -95,6 +101,8 @@ app.get("/api/retail/transactions", (req, res) => res.json(db.recentTransactions
 
 app.get("/api/retail/mock-bill", (req, res) => res.json(MOCK_BILL));
 
+app.get("/api/retail/mock-inventory", (req, res) => res.json(MOCK_INVENTORY));
+
 // ------------------------------------------------------------- THRESHOLD --
 
 app.patch("/api/retail/products/:id/threshold", (req, res) => {
@@ -149,10 +157,22 @@ app.post("/api/retail/upload-inventory-llm", async (req, res) => {
 
 // ------------------------------------------------------------- REPORTS ---
 
+// Newest-first list of archived daily report snapshots.
+app.get("/api/retail/reports", (req, res) => res.json(listCachedReports()));
+
 app.get("/api/retail/report.xlsx", (req, res) => {
-  const buffer = req.query.fresh === "false" ? getDailyReportBuffer(TODAY) : getFreshReportBuffer(TODAY);
+  const date = typeof req.query.date === "string" ? req.query.date : null;
+  let buffer;
+  let filenameDate = dateStr(TODAY);
+  if (date) {
+    buffer = getCachedReportByDate(date);
+    if (!buffer) return res.status(404).json({ error: `No archived report for ${date}` });
+    filenameDate = date;
+  } else {
+    buffer = req.query.fresh === "false" ? getDailyReportBuffer(TODAY) : getFreshReportBuffer(TODAY);
+  }
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="restock-report-${dateStr(TODAY)}.xlsx"`);
+  res.setHeader("Content-Disposition", `attachment; filename="restock-report-${filenameDate}.xlsx"`);
   res.send(buffer);
 });
 
@@ -163,6 +183,9 @@ app.post("/api/retail/reset", (req, res) => {
   seedIfEmpty();
   res.json({ ok: true, products: db.allProducts().map(buildProductSummary) });
 });
+
+// Friendly path for the mock billing terminal (also served directly as /pos.html).
+app.get("/pos", (req, res) => res.redirect("/pos.html"));
 
 app.get("/healthz", (req, res) =>
   res.json({

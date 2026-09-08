@@ -328,6 +328,13 @@ async function renderRecordSale() {
     <div class="section-header"><h2>Record Sale</h2><span class="sub">decreases stock</span></div>
     <div class="detail-body" style="padding-top:0">
       <div class="card">
+        <h3>How sales get here</h3>
+        <p class="footnote" style="margin-top:0; padding:0 0 10px">
+          A real store's POS/billing system would post each bill automatically (see <code>server/pos-connectors/</code> for the Square/Clover stubs). Until one is wired up, sales come in three ways: the <b>mock billing terminal</b> below, a <b>bill file</b>, or <b>manual entry</b>. All three decrease stock the same way.
+        </p>
+        <button id="openPosBtn" class="btn-secondary">🧾 Open mock billing terminal</button>
+      </div>
+      <div class="card">
         <h3>Upload a sales bill</h3>
         <p class="footnote" style="margin-top:0; padding:0 0 10px">
           Upload a JSON bill (same shape as the sample below) to apply every line item's quantity against stock.
@@ -391,6 +398,10 @@ async function renderRecordSale() {
     }
   };
 
+  document.getElementById("openPosBtn").onclick = () => {
+    window.open(apiBase() + "/pos", "_blank");
+  };
+
   document.getElementById("downloadSampleBtn").onclick = () => {
     window.open(apiBase() + "/api/retail/mock-bill", "_blank");
   };
@@ -449,29 +460,93 @@ async function renderReports() {
           A spreadsheet with every product's stock %, threshold, and alert on one sheet, and Last 5 Days / 30-day weekday-average sales on a Detail sheet — built fresh from the current database.
         </p>
         <button id="downloadReportBtn" class="btn-primary">⬇️ Download Excel report</button>
+        <div id="pastReports" style="margin-top:14px"></div>
       </div>
       <div class="card">
         <h3>Upload the latest inventory received</h3>
         <p class="footnote" style="margin-top:0; padding:0 0 10px">
-          This is a <b>restock</b>, not a sale — it raises stock and resets the last-restock date. New items on the bill become new tracked products automatically.
+          This is a <b>restock</b>, not a sale — it raises stock and resets the last-restock date. New items on the bill become new tracked products automatically, and each product's % stock / alert is recomputed against its threshold right away.
         </p>
-        <h4 style="margin:0 0 6px; font-size:12.5px; color:var(--muted)">Read with AI (paste bill text)</h4>
+        <h4 style="margin:0 0 6px; font-size:12.5px; color:var(--muted)">Read a scanned bill / photo with AI</h4>
+        <label class="btn-primary" style="cursor:pointer; display:inline-flex">
+          📷 Choose bill image
+          <input id="llmImageInput" type="file" accept="image/*" style="display:none" />
+        </label>
+        <div id="llmImageStatus" class="footnote" style="margin-top:8px"></div>
+        <h4 style="margin:12px 0 6px; font-size:12.5px; color:var(--muted)">…or paste the bill text</h4>
         <textarea id="llmBillText" rows="4" placeholder="Paste the text of a supplier bill/invoice here…" style="width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--border); font-size:14px; font-family:inherit"></textarea>
-        <button id="parseLlmBtn" class="btn-primary" style="margin-top:8px">Read bill with AI</button>
+        <button id="parseLlmBtn" class="btn-secondary" style="margin-top:8px">Read pasted text with AI</button>
         <div id="llmStatus" class="footnote" style="margin-top:8px"></div>
+        <p class="footnote" style="padding:8px 0 0">Both need an <code>OPENAI_API_KEY</code> set on the server (Render → service → Environment). Without it, use the structured JSON option below.</p>
         <hr style="border:none; border-top:1px solid var(--border); margin:14px 0" />
         <h4 style="margin:0 0 6px; font-size:12.5px; color:var(--muted)">Or upload structured JSON (no AI needed)</h4>
-        <label class="btn-secondary" style="cursor:pointer">
-          Upload inventory (.json)
-          <input id="inventoryFileInput" type="file" accept="application/json" style="display:none" />
-        </label>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <label class="btn-secondary" style="cursor:pointer">
+            Upload inventory (.json)
+            <input id="inventoryFileInput" type="file" accept="application/json" style="display:none" />
+          </label>
+          <button id="downloadSampleInvBtn" class="btn-text">Download sample</button>
+        </div>
         <div id="inventoryStatus" class="footnote" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h3>Mock billing terminal</h3>
+        <p class="footnote" style="margin-top:0; padding:0 0 10px">
+          A stand-in for a real store POS/billing system. Ring up items there and it posts the bill straight into Restock Radar (decreasing stock), the same way a live POS integration would.
+        </p>
+        <button id="openPosBtn" class="btn-secondary">🧾 Open billing terminal</button>
       </div>
     </div>`;
 
-  document.getElementById("downloadReportBtn").onclick = () => {
-    window.open(apiBase() + "/api/retail/report.xlsx", "_blank");
-  };
+  const reportUrl = (qs) => apiBase() + "/api/retail/report.xlsx" + (qs ? `?${qs}` : "");
+
+  document.getElementById("downloadReportBtn").onclick = () => window.open(reportUrl(), "_blank");
+  document.getElementById("openPosBtn").onclick = () => window.open(apiBase() + "/pos", "_blank");
+  document.getElementById("downloadSampleInvBtn").onclick = () =>
+    window.open(apiBase() + "/api/retail/mock-inventory", "_blank");
+
+  getJSON("/api/retail/reports")
+    .then((reports) => {
+      const el = document.getElementById("pastReports");
+      if (!el) return;
+      if (!reports.length) {
+        el.innerHTML = `<div class="footnote" style="padding:0">No past snapshots yet — the first download each day is archived here.</div>`;
+        return;
+      }
+      el.innerHTML =
+        `<div class="footnote" style="padding:0 0 6px; font-weight:700; text-transform:uppercase; letter-spacing:.03em">Past reports</div>` +
+        reports
+          .map(
+            (r) => `<div class="kv-row"><span class="k">${fmtDate(r.date)}</span>
+              <a class="v" href="${reportUrl("date=" + r.date)}" target="_blank" style="color:var(--accent-dark); text-decoration:underline">Download</a></div>`
+          )
+          .join("");
+    })
+    .catch(() => {});
+
+  document.getElementById("llmImageInput").addEventListener("change", async (e) => {
+    const statusEl = document.getElementById("llmImageStatus");
+    const file = e.target.files[0];
+    if (!file) return;
+    statusEl.textContent = "Reading image…";
+    try {
+      const imageBase64 = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => reject(new Error("Couldn't read that image."));
+        fr.readAsDataURL(file);
+      });
+      statusEl.textContent = "Reading bill with AI…";
+      const result = await postJSON("/api/retail/upload-inventory-llm", { imageBase64 });
+      state.cache = {};
+      const created = result.applied.filter((a) => a.created).map((a) => a.name);
+      statusEl.textContent =
+        `✅ Applied ${result.applied.length} line(s) — stock raised and alerts recomputed.` +
+        (created.length ? ` New product(s): ${created.join(", ")}.` : "");
+    } catch (err) {
+      statusEl.textContent = `❌ ${err.message}`;
+    }
+  });
 
   document.getElementById("parseLlmBtn").onclick = async () => {
     const statusEl = document.getElementById("llmStatus");

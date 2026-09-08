@@ -30,20 +30,25 @@ Two separate flows change stock, matching how a real store actually
 operates — selling inventory and receiving inventory are different events:
 
 1. **Record Sale tab — a sale decreases stock.** Type in quantities sold by
-   hand, or upload a bill file shaped like
-   `server/seed-data/mock-billing-export.json` (a mocked example of a
-   billing-system export — use "Download sample bill" to grab it and
-   upload it right back to see the flow end-to-end).
+   hand, upload a bill file shaped like
+   `server/seed-data/mock-billing-export.json` (use "Download sample bill"),
+   or ring items up on the **mock billing terminal** at `/pos` — a
+   stand-in store POS that posts each completed bill straight into the app,
+   the way a real Square/Clover integration eventually would.
 2. **Reports tab — "Upload the latest inventory received" increases stock.**
-   This is a restock, not a sale: it raises `stocked`/`currentStock` and
-   resets the last-restock date. Two ways to do it:
-   - **Read with AI** — paste a supplier bill's text and an LLM
-     (OpenAI `gpt-4o-mini`) extracts the line items. Requires
-     `OPENAI_API_KEY` set on the server (see below); without it the
-     endpoint returns a clear "not configured" message rather than
+   This is a restock, not a sale: it raises `stocked`/`currentStock`,
+   resets the last-restock date, and immediately recomputes each product's
+   % stock and alert against its threshold. Three ways to do it:
+   - **Read a scanned bill / photo with AI** — pick an image of a supplier
+     invoice and a multimodal LLM (OpenAI `gpt-4o-mini`) extracts the line
+     items.
+   - **Read pasted text with AI** — same, from free-form typed/pasted text.
+     Both require `OPENAI_API_KEY` set on the server (see below); without it
+     the endpoint returns a clear "not configured" message rather than
      failing silently.
    - **Structured JSON upload** — no AI/API key needed, same idea as the
-     sales-bill upload but for restocks.
+     sales-bill upload but for restocks (`mock-inventory-received.json` is
+     the "Download sample").
    Either way, **new items on the bill become new tracked products
    automatically** — the catalog isn't fixed to the 12 seeded items.
 3. Every product has its **own restock threshold** (default 50%, editable
@@ -120,13 +125,16 @@ for the tentative-restock-date math.
 - `PATCH /api/retail/products/:id/threshold` — body `{ thresholdPct }` (0–1) — saves that product's restock threshold
 - `GET /api/retail/alerts` — products currently below their own threshold ("Restock Needed")
 - `GET /api/retail/mock-bill` — sample sales-bill export (same file the app's "Download sample bill" button fetches)
+- `GET /api/retail/mock-inventory` — sample supplier delivery note (the Reports tab's "Download sample" for the structured restock upload)
 - `GET /api/retail/transactions` — recent recorded sales (manual, uploaded bill, or seed history)
 - `POST /api/retail/sales` — body `{ items: [{ id, quantitySold }] }` — manual sale entry (decreases stock)
-- `POST /api/retail/upload-bill` — body shaped like `mock-billing-export.json` — bulk sale entry from a bill (decreases stock)
+- `POST /api/retail/upload-bill` — body shaped like `mock-billing-export.json` — bulk sale entry from a bill (decreases stock). The mock billing terminal at `/pos` posts here.
 - `POST /api/retail/upload-inventory` — body `{ items: [{ item, quantity, unitCost?, unit? }] }` — structured restock, no AI needed (increases stock, can create new products; `unit` sets the stocking unit for a newly-created product, default `lb`)
-- `POST /api/retail/upload-inventory-llm` — body `{ text }` or `{ imageBase64 }` — same as above but the line items are read from free-form bill text/image by an LLM (needs `OPENAI_API_KEY`)
-- `GET /api/retail/report.xlsx` — downloads the Excel report described above
+- `POST /api/retail/upload-inventory-llm` — body `{ text }` or `{ imageBase64 }` (a `data:` URL from a photographed/scanned bill) — same as above but the line items are read by an LLM (needs `OPENAI_API_KEY`)
+- `GET /api/retail/report.xlsx` — downloads today's Excel report (fresh). `?date=YYYY-MM-DD` downloads an archived daily snapshot instead
+- `GET /api/retail/reports` — list of archived daily report snapshots (newest first)
 - `POST /api/retail/reset` — wipes and reseeds the database back to the 12 starting products
+- `GET /pos` — mock billing terminal (a stand-in store POS that posts sales into the app)
 - `GET /healthz`
 
 ## What's real vs. placeholder
@@ -147,14 +155,16 @@ exists in the database at the time.
   first launch.
 - `server/pos-connectors/{square,clover}.js` — each documents what a real
   POS integration needs (OAuth flow, endpoint, field-mapping) and returns
-  `null`. Wiring one of these up for real — so sales get recorded
-  automatically instead of via manual entry/upload — is the natural next
-  step once a specific POS is chosen.
-- The LLM bill reader (`server/llm-bill-parser.js`) is real code that
-  makes a real OpenAI API call, but needs your own `OPENAI_API_KEY` to run
-  — there's no key bundled with this repo. It also only reads text/images
-  passed to it directly; there's no OCR/photo-capture pipeline wired into
-  the app's UI yet, just a paste-text box.
+  `null`. The **mock billing terminal** (`www/pos.html`, served at `/pos`)
+  is the interim stand-in: it's a real working checkout UI that posts bills
+  to `/api/retail/upload-bill`, so you can generate sales data end-to-end
+  without a POS account. Replacing it with a real connector is the natural
+  next step once a specific POS is chosen.
+- The LLM bill reader (`server/llm-bill-parser.js`) is real code that makes
+  a real OpenAI API call, but needs your own `OPENAI_API_KEY` to run —
+  there's no key bundled with this repo. The Reports tab now has both a
+  photo/scan picker and a paste box that feed it; there's still no
+  dedicated in-app camera capture or non-LLM OCR fallback.
 - Push notifications for the restock alert: not implemented. The app is
   wrapped in Capacitor (`android/`, `ios/` folders) so it installs as a
   real native app, but native push needs the Capacitor Push Notifications

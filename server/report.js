@@ -81,7 +81,35 @@ function getDailyReportBuffer(today) {
 // report" button so it reflects sales/uploads recorded moments ago.
 function getFreshReportBuffer(today) {
   const wb = buildWorkbook(today);
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  // Archive the first download of each calendar day so "Past reports" has
+  // a same-day snapshot to look back at.
+  const cachedPath = path.join(REPORTS_DIR, `restock-report-${today.toISOString().slice(0, 10)}.xlsx`);
+  if (!fs.existsSync(cachedPath)) fs.writeFileSync(cachedPath, buffer);
+  return buffer;
 }
 
-module.exports = { buildWorkbook, getDailyReportBuffer, getFreshReportBuffer };
+// Every day-cached report snapshot on disk, newest first — powers the
+// "Past reports" list in the app.
+function listCachedReports() {
+  return fs
+    .readdirSync(REPORTS_DIR)
+    .map((f) => f.match(/^restock-report-(\d{4}-\d{2}-\d{2})\.xlsx$/))
+    .filter(Boolean)
+    .map((m) => ({ date: m[1], file: m[0], bytes: fs.statSync(path.join(REPORTS_DIR, m[0])).size }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+// One archived snapshot by its date key (YYYY-MM-DD). null if not cached.
+function getCachedReportByDate(dateKey) {
+  const p = path.join(REPORTS_DIR, `restock-report-${dateKey}.xlsx`);
+  return fs.existsSync(p) ? fs.readFileSync(p) : null;
+}
+
+module.exports = {
+  buildWorkbook,
+  getDailyReportBuffer,
+  getFreshReportBuffer,
+  listCachedReports,
+  getCachedReportByDate,
+};

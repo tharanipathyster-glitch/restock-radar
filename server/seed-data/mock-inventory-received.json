@@ -1,0 +1,13 @@
+{
+  "_comment": "Sample supplier delivery note / inventory-received bill, standing in for a real wholesaler invoice. Upload from the app's Reports tab (structured JSON option) to raise stock. 'unit' only matters for items not already tracked - it sets the stocking unit of the newly-created product.",
+  "billId": "SUP-2026-0908-114",
+  "date": "2026-09-08",
+  "items": [
+    { "item": "Tomatoes", "quantity": 90, "unitCost": 1.2 },
+    { "item": "Chillis", "quantity": 110, "unitCost": 1.7 },
+    { "item": "Parle G Biscuits", "quantity": 24, "unit": "pack", "unitCost": 4.1 },
+    { "item": "Ghee", "quantity": 40, "unit": "tin", "unitCost": 6.05 },
+    { "item": "Basmati Rice", "quantity": 250, "unit": "lb", "unitCost": 0.95 },
+    { "item": "Turmeric Powder", "quantity": 60, "unit": "pack", "unitCost": 1.35 }
+  ]
+}
