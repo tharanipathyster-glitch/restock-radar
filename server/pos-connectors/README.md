@@ -13,9 +13,8 @@ section.
 
 | File | POS system | Where restock-radar would use it |
 |---|---|---|
-| `square.js` | Square | Retail/grocery — Square's Inventory API (paid Plus/Premium tiers) |
-| `toast.js` | Toast | Restaurants — Toast's Orders/MenuItems APIs give dish-level sales; ingredient stock still needs the recipe-mapping layer this app adds on top |
-| `clover.js` | Clover | Either — Clover's Inventory API, similar shape to Square's |
+| `square.js` | Square | Square's Inventory API (paid Plus/Premium tiers) |
+| `clover.js` | Clover | Clover's Inventory API, similar shape to Square's |
 
 Every connector exports the same shape so `server.js` can call any of them
 interchangeably once real credentials exist:

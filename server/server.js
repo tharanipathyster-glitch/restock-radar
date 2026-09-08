@@ -1,143 +1,120 @@
 // Restock Radar — backend
 //
-// What this actually does: serves the bundled seed data (18 retail/grocery
-// products, 10 restaurant dishes + 20 recipe-mapped ingredients, 45 days of
-// simulated daily sales each) through the analytics engine in analytics.js,
-// which computes real sales velocity, depletion projections, and 80%-
-// depleted alerts from that data. Retail and restaurant are separate,
-// unrelated product lines, per the ask — different data shapes, different
-// endpoints, different frontend screens.
+// Retail-only inventory tracker. Product catalog + initial stock levels
+// come from the store's own billing-system export (server/seed-data/
+// retail-products.json, transcribed from Testing File.xlsx). From there,
+// stock only changes when a sale is recorded — either typed in manually
+// (POST /api/retail/sales) or uploaded as a bill matching the shape of
+// server/seed-data/mock-billing-export.json (POST /api/retail/upload-bill).
+// Once a product's stock drops below 50% of its initial level, it's flagged
+// "critical" with a tentative restock date based on that product's own
+// restock lead time — see analytics.js.
 //
-// What this does NOT do yet: pull from a real POS. The pos-connectors/
-// directory documents exactly what each integration would need (OAuth flow,
-// endpoint, field-mapping problem) but every connector returns null today —
-// see README.md's "What's real vs. placeholder" section before treating any
-// number here as live.
+// State lives in memory and resets on restart; see README for why that's
+// an intentional simplification for this prototype, not an oversight.
 
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const {
-  buildRetailDetail,
-  buildIngredientDetail,
-  buildDishDetail,
-  projectRestock,
-} = require("./analytics");
+const { buildProductDetail, computeStockStatus } = require("./analytics");
 
-const RETAIL_PRODUCTS = require("./seed-data/retail-products.json");
-const RETAIL_HISTORY = require("./seed-data/retail-sales-history.json");
-const RESTAURANT_DISHES = require("./seed-data/restaurant-dishes.json");
-const RESTAURANT_HISTORY = require("./seed-data/restaurant-sales-history.json");
-const RESTAURANT_INGREDIENTS = require("./seed-data/restaurant-ingredients.json");
-const RESTAURANT_RECIPES = require("./seed-data/restaurant-recipes.json");
+const SEED_PRODUCTS = require("./seed-data/retail-products.json");
+const MOCK_BILL = require("./seed-data/mock-billing-export.json");
 
-const TODAY = new Date("2026-09-08"); // fixed to match generate-seed-data.js
+const TODAY = new Date("2026-09-08"); // fixed "today" so the demo is reproducible
+
+// Mutable in-memory copy of the seed data — this is what actually changes
+// as sales get recorded, leaving the seed-data JSON files untouched.
+const products = SEED_PRODUCTS.map((p) => ({ ...p }));
+const transactions = []; // { id, date, source: "manual"|"bill", billId?, items: [{productId, name, quantitySold}] }
+
+function findProduct(idOrName) {
+  const needle = String(idOrName).trim().toLowerCase();
+  return products.find((p) => p.id.toLowerCase() === needle || p.name.toLowerCase() === needle);
+}
+
+function applySale(items, source, billId) {
+  const applied = [];
+  const unmatched = [];
+  items.forEach((entry) => {
+    const product = findProduct(entry.id || entry.item);
+    const qty = Number(entry.quantitySold);
+    if (!product || !Number.isFinite(qty) || qty <= 0) {
+      unmatched.push(entry);
+      return;
+    }
+    product.currentStock = Math.max(0, Math.round((product.currentStock - qty) * 100) / 100);
+    applied.push({ productId: product.id, name: product.name, quantitySold: qty });
+  });
+  if (applied.length) {
+    transactions.unshift({
+      id: `TXN-${Date.now()}`,
+      date: TODAY.toISOString().slice(0, 10),
+      source,
+      billId: billId || null,
+      items: applied,
+    });
+  }
+  return { applied, unmatched };
+}
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, "../www")));
 
-function retailHistoryFor(id) {
-  return RETAIL_HISTORY.find((h) => h.productId === id);
-}
-function restaurantHistoryFor(id) {
-  return RESTAURANT_HISTORY.find((h) => h.dishId === id);
-}
-
-// ---------------------------------------------------------------- RETAIL ---
-
 app.get("/api/retail/products", (req, res) => {
-  const list = RETAIL_PRODUCTS.map((p) => {
-    const hist = retailHistoryFor(p.id);
-    const projection = projectRestock(
-      p.currentStock,
-      p.parLevel,
-      p.dailyVelocity,
-      p.restockLeadDays,
-      TODAY
-    );
-    return { ...p, ...projection, monthToDateUnitsSold: undefined, hasHistory: Boolean(hist) };
-  });
-  res.json(list);
+  res.json(products.map((p) => buildProductDetail(p, TODAY)));
 });
 
 app.get("/api/retail/products/:id", (req, res) => {
-  const product = RETAIL_PRODUCTS.find((p) => p.id === req.params.id);
-  const hist = retailHistoryFor(req.params.id);
-  if (!product || !hist) return res.status(404).json({ error: "Product not found" });
-  res.json(buildRetailDetail(product, hist, TODAY));
+  const product = findProduct(req.params.id);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  res.json(buildProductDetail(product, TODAY));
 });
 
 app.get("/api/retail/alerts", (req, res) => {
-  const alerts = RETAIL_PRODUCTS.map((p) => {
-    const projection = projectRestock(
-      p.currentStock,
-      p.parLevel,
-      p.dailyVelocity,
-      p.restockLeadDays,
-      TODAY
-    );
-    return { id: p.id, name: p.name, category: p.category, ...projection };
-  }).filter((p) => p.alertLevel !== "ok");
-  // critical first, then watch; within each, soonest depletion first
-  alerts.sort((a, b) => {
-    if (a.alertLevel !== b.alertLevel) return a.alertLevel === "critical" ? -1 : 1;
-    return (a.daysUntilDepleted ?? 999) - (b.daysUntilDepleted ?? 999);
-  });
+  const alerts = products
+    .map((p) => buildProductDetail(p, TODAY))
+    .filter((p) => p.alertLevel !== "ok")
+    .sort((a, b) => {
+      if (a.alertLevel !== b.alertLevel) return a.alertLevel === "critical" ? -1 : 1;
+      return a.pctRemaining - b.pctRemaining;
+    });
   res.json(alerts);
 });
 
-// ------------------------------------------------------------- RESTAURANT --
+// Sample of what a real billing-system export looks like — used both to
+// demonstrate the shape and as a ready-made file to test the upload feature
+// with (GET this, save it, then upload it back via /api/retail/upload-bill).
+app.get("/api/retail/mock-bill", (req, res) => res.json(MOCK_BILL));
 
-app.get("/api/restaurant/dishes", (req, res) => {
-  const list = RESTAURANT_DISHES.map((d) => {
-    const hist = restaurantHistoryFor(d.id);
-    return hist ? buildDishDetail(d, hist, TODAY) : d;
+app.get("/api/retail/transactions", (req, res) => res.json(transactions.slice(0, 50)));
+
+// Manual entry: { items: [{ id, quantitySold }] }
+app.post("/api/retail/sales", (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "No items provided" });
+  const { applied, unmatched } = applySale(items, "manual");
+  res.json({ applied, unmatched, products: products.map((p) => buildProductDetail(p, TODAY)) });
+});
+
+// Bill upload: same shape as mock-billing-export.json — { billId, date, items: [{ item, quantitySold }] }
+app.post("/api/retail/upload-bill", (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Bill has no items" });
+  const { applied, unmatched } = applySale(items, "bill", req.body.billId);
+  res.json({ applied, unmatched, products: products.map((p) => buildProductDetail(p, TODAY)) });
+});
+
+// Convenience for demoing repeatedly — puts every product back to its
+// initial stock level from Testing File.xlsx.
+app.post("/api/retail/reset", (req, res) => {
+  products.forEach((p, i) => {
+    p.currentStock = SEED_PRODUCTS[i].currentStock;
   });
-  res.json(list);
-});
-
-app.get("/api/restaurant/dishes/:id", (req, res) => {
-  const dish = RESTAURANT_DISHES.find((d) => d.id === req.params.id);
-  const hist = restaurantHistoryFor(req.params.id);
-  if (!dish || !hist) return res.status(404).json({ error: "Dish not found" });
-  const recipe = RESTAURANT_RECIPES.find((r) => r.dishId === req.params.id);
-  res.json({ ...buildDishDetail(dish, hist, TODAY), recipe: recipe ? recipe.ingredients : [] });
-});
-
-app.get("/api/restaurant/ingredients", (req, res) => {
-  const list = RESTAURANT_INGREDIENTS.map((i) => buildIngredientDetail(i, TODAY));
-  res.json(list);
-});
-
-app.get("/api/restaurant/ingredients/:id", (req, res) => {
-  const ingredient = RESTAURANT_INGREDIENTS.find((i) => i.id === req.params.id);
-  if (!ingredient) return res.status(404).json({ error: "Ingredient not found" });
-  res.json(buildIngredientDetail(ingredient, TODAY));
-});
-
-app.get("/api/restaurant/alerts", (req, res) => {
-  const alerts = RESTAURANT_INGREDIENTS.map((i) => {
-    const projection = projectRestock(
-      i.currentStock,
-      i.parLevel,
-      i.dailyVelocity,
-      i.restockLeadDays,
-      TODAY
-    );
-    return {
-      id: i.id,
-      name: i.name,
-      unit: i.unit,
-      usedInDishes: i.usedInDishes,
-      ...projection,
-    };
-  }).filter((i) => i.alertLevel !== "ok");
-  alerts.sort((a, b) => {
-    if (a.alertLevel !== b.alertLevel) return a.alertLevel === "critical" ? -1 : 1;
-    return (a.daysUntilDepleted ?? 999) - (b.daysUntilDepleted ?? 999);
-  });
-  res.json(alerts);
+  transactions.length = 0;
+  res.json({ ok: true, products: products.map((p) => buildProductDetail(p, TODAY)) });
 });
 
 app.get("/healthz", (req, res) =>
@@ -145,9 +122,7 @@ app.get("/healthz", (req, res) =>
     ok: true,
     today: TODAY.toISOString().slice(0, 10),
     posIntegrationsConfigured: false,
-    retailProducts: RETAIL_PRODUCTS.length,
-    restaurantDishes: RESTAURANT_DISHES.length,
-    restaurantIngredients: RESTAURANT_INGREDIENTS.length,
+    retailProducts: products.length,
   })
 );
 

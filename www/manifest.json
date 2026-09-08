@@ -3,7 +3,7 @@
   "short_name": "Restock",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f4f6f8",
-  "theme_color": "#144e82",
-  "description": "Sales velocity and restock alerts for retail and restaurant inventory"
+  "background_color": "#f6f4ee",
+  "theme_color": "#3a7d6f",
+  "description": "Stock tracking and restock alerts for retail/grocery inventory"
 }

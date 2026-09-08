@@ -1,20 +1,18 @@
 # Restock Radar
 
-A phone-friendly prototype that reads sales history (standing in for a real
-POS export today) and tells an independent retailer or restaurant two
-things: **what's selling most**, and **what's about to run out and when to
-reorder it** — with an alert once something crosses 80% depleted. Built as a
-variant of Hardware Check's architecture (Express backend + static
-mobile-first frontend, real math over honestly-labeled seed data), split
-into two independent product lines because retail and restaurants are
-different data problems, not just different skins.
+A phone-friendly app for an independent grocery/retail store that tracks
+stock against a known baseline and tells you **what needs restocking now**
+— triggered once an item's stock drops below 50% of its initial level, with
+a tentative restock date based on that item's own lead time. Stock changes
+come from recording sales, either typed in by hand or uploaded as a bill
+file shaped like a real billing system's export.
 
 ## Run it
 
 ```bash
 cd server
 npm install
-npm run seed      # regenerates server/seed-data/*.json (already included)
+npm run seed      # regenerates server/seed-data/retail-products.json from Testing File.xlsx
 npm start         # serves the API + frontend on http://localhost:3001
 ```
 
@@ -23,15 +21,101 @@ to phone width) — it's a single responsive page, no separate mobile build.
 "Add to Home Screen" will install it like an app via the included
 `manifest.json`.
 
+## How it works
+
+1. **Product catalog + initial stock** come from the store's own billing
+   data — transcribed in `server/generate-seed-data.js` from
+   `Testing File.xlsx` (Item / Quantity in Lbs / Cost / Restock Time). That
+   initial quantity is the 100% baseline every alert is measured against.
+2. **Record a sale** (the "Record Sale" tab) two ways:
+   - Type in quantities sold per product by hand, or
+   - Upload a bill file — `POST /api/retail/upload-bill` accepts JSON
+     shaped like `server/seed-data/mock-billing-export.json` (a mocked
+     example of what a real billing/POS system's export would look like).
+     Use "Download sample bill" in the app to grab that exact file and
+     upload it right back to see the flow end-to-end.
+3. Either path decrements `currentStock` for the matching products and logs
+   a transaction (visible under "Recent activity" on the Record Sale tab).
+4. Once a product's `currentStock` falls below **50%** of its
+   `initialStock`, it's flagged `critical` — "Restock now" — with a
+   tentative restock date of today plus that product's own
+   `restockLeadDays` (from the Testing File's "Restock Time" column).
+   Below 70% it's flagged `watch` as an early warning.
+
+State lives in memory in `server.js` and resets when the server restarts —
+intentional for a prototype/test build. `POST /api/retail/reset` also
+resets every product back to its initial stock level on demand (used by
+the "Reset demo data" button in the app).
+
+## Test data
+
+`Testing File.xlsx` (in the repo root, one level above `restock-radar/`) is
+the source of truth for the 12 seeded products:
+
+| Item | Initial stock (lbs) | Total cost | Restock time |
+|---|---|---|---|
+| Tomatoes | 100 | $117 | 1 week |
+| Onions | 120 | $239 | 2 weeks |
+| Chillis | 140 | $229 | 3 weeks |
+| Toor Dhal | 500 | $180 | 4 weeks |
+| Sona Masuri Rice | 1000 | $235 | 5 weeks |
+| Ghee | 50 | $296 | 6 weeks |
+| Mustard Oil | 50 | $164 | 7 weeks |
+| Parle G Biscuits | 10 | $163 | 8 weeks |
+| Amul Paneer | 141 | $216 | 9 weeks |
+| Bitter Gourd | 253 | $222 | 10 weeks |
+| Capsicum | 271 | $194 | 11 weeks |
+| Chilli Powder | 219 | $191 | 12 weeks |
+
+Per-unit cost is derived as `totalCost / quantity`. Restock lead time is
+converted to days (`weeks × 7`) for the tentative-restock-date math.
+
+## API
+
+- `GET /api/retail/products` — full catalog with computed stock status
+- `GET /api/retail/products/:id` — single product detail
+- `GET /api/retail/alerts` — products currently `critical` or `watch`, sorted critical-first
+- `GET /api/retail/mock-bill` — sample billing-system export (same file the app's "Download sample bill" button fetches)
+- `GET /api/retail/transactions` — recent recorded sales (manual entries + uploaded bills)
+- `POST /api/retail/sales` — body `{ items: [{ id, quantitySold }] }` — manual sale entry
+- `POST /api/retail/upload-bill` — body shaped like `mock-billing-export.json` — bulk sale entry from a bill
+- `POST /api/retail/reset` — resets every product back to its initial stock level
+- `GET /healthz`
+
+## What's real vs. placeholder
+
+**Real:** the 50%-of-baseline restock trigger, the tentative-restock-date
+math (today + that product's own lead time), the sale-recording and
+bill-upload endpoints, and the transaction log — all genuine calculations
+over whatever stock numbers exist at the time.
+
+**Placeholder:**
+- The 12-product catalog and its initial stock/cost/lead-time numbers come
+  from a manually-authored test spreadsheet (`Testing File.xlsx`), standing
+  in for a real billing-system product export.
+- `server/pos-connectors/{square,clover}.js` — each documents what a real
+  POS integration needs (OAuth flow, endpoint, field-mapping) and returns
+  `null`. Wiring one of these up for real — so sales get recorded
+  automatically instead of via manual entry/upload — is the natural next
+  step once a specific POS is chosen.
+- Push notifications for the restock alert: not implemented. The app is
+  wrapped in Capacitor (`android/`, `ios/` folders) so it installs as a
+  real native app, but native push needs the Capacitor Push Notifications
+  plugin plus Firebase Cloud Messaging (Android) / APNs (iOS) registration
+  — a real backend push service and device to test on. Today, the red
+  badge count on the Alerts tab is the notification.
+- State resets on server restart (in-memory only) — a real deployment
+  would persist to a database instead.
+
 ## Run it as a native Android / iOS app
 
-This repo is also wrapped with [Capacitor](https://capacitorjs.com/) so the
-same `www/` frontend ships as an installable native app on both platforms,
+This repo is wrapped with [Capacitor](https://capacitorjs.com/) so the same
+`www/` frontend ships as an installable native app on both platforms,
 instead of only a browser tab. The `android/` and `ios/` folders here are
 generated native projects (already added via `npx cap add android|ios`).
 
 Building the Android project from the command line needs **JDK 21**
-specifically (Capacitor 8's Android Gradle setup targets Java 21 —  newer
+specifically (Capacitor 8's Android Gradle setup targets Java 21 — newer
 JDKs like the JBR bundled with recent Android Studio builds are too new for
 this Gradle version, and JDK 17 is too old). Android Studio handles this
 automatically if you open the project there instead.
@@ -101,8 +185,7 @@ doesn't run a Node server for you.
 1. **Push the code to GitHub:** open the Source Control panel in VS Code
    (the branch icon in the left sidebar) and click **Publish to Branch** /
    **Publish to GitHub**. Choose public or private, and let it create the
-   repo and push. (Requires a one-time VS Code window reload after
-   installing Git so the Source Control panel picks it up.)
+   repo and push.
 2. **Deploy the backend on Render.com** (free tier): sign in to
    [render.com](https://render.com) with GitHub, click **New → Blueprint**,
    pick this repo — Render will read the included `render.yaml` and deploy
@@ -117,135 +200,24 @@ Note: Render's free tier spins the service down after inactivity, so the
 first request after a while can take ~30-60s to wake it back up — expected
 on a free plan, not a bug.
 
-## Who this is for
-
-**Retail / grocery:** independent grocery stores, convenience stores, and
-small multi-location chains — the segment squeezed between doing restocking
-by gut feel (walking the aisles) and paying for a full retail-management
-suite. Square's own Inventory features are gated to its paid Plus/Premium
-tiers; a store on Square's free tier or on a simpler system has *no* built-in
-"you're about to run out" signal today. That's the customer: someone with a
-working POS but no restock-timing layer on top of it.
-
-**Restaurants:** independent restaurants and small multi-unit groups that
-run a mainstream POS (Toast, Square, Clover) but don't pay for a dedicated
-back-office system like MarketMan (~$239/mo) or Restaurant365 (~$300+/mo).
-Those tools are real and capable, but priced and scoped for operations big
-enough to justify a category manager — this is the cheaper, narrower tool
-for the operator who's currently tracking "are we low on buns" by walking
-into the walk-in cooler.
-
-These are deliberately kept as **two separate products** in this repo (own
-data model, own screens, own API namespace) because a grocery SKU restocks
-the same item it sells, while a restaurant sells a *dish* but restocks
-*ingredients* — see below.
-
-## What's real vs. placeholder — read this before treating any number as live
-
-**Real, and doing actual work:**
-- The analytics engine (`server/analytics.js`): sales-velocity averaging,
-  days-until-depleted projection, tentative restock date, and the ≥80%-
-  depleted alert flag are genuine calculations over whatever sales history
-  they're given — verify this by changing a number in `seed-data/*.json`
-  and reloading; the projections move accordingly.
-- The recipe → ingredient-usage math for restaurants: ingredient daily usage
-  is summed live from `dishUnitsSold × recipeQtyPerDish` across every dish
-  that uses it (see `restaurant-recipes.json` and `generate-seed-data.js`'s
-  `buildRestaurant()`), not hand-entered.
-- The day-wise "this month" sales breakdown and the alert sort/priority
-  ordering (critical before watch, soonest depletion first).
-
-**Placeholder — simulated, not connected to anything live:**
-- **All sales history and current stock come from `generate-seed-data.js`**,
-  a seeded random-number script that invents 45 days of daily sales for 21
-  grocery products and 10 restaurant dishes, then derives "current stock" as
-  par level minus cumulative sales since a randomized last-restock date.
-  This is a believable stand-in for a POS export, not real transactions.
-- **`server/pos-connectors/{square,toast,clover}.js`** — each documents
-  exactly what a real integration needs (OAuth flow, specific endpoint,
-  the field-mapping step) and returns `null`. None of them call a real API.
-  This is the same pattern as Hardware Check's `retailer-actors.js`: the
-  wiring is there, the credentials and live calls are not.
-- Push notifications for the 80%-depleted alert: **not implemented.** The
-  app is now wrapped in Capacitor (`android/` and `ios/` folders) so it
-  installs and runs as a real native app rather than only a browser tab,
-  but native push still needs the Capacitor Push Notifications plugin plus
-  registering with Firebase Cloud Messaging (Android) and APNs (iOS) —
-  a real backend push service and a real device to test delivery on, not
-  achievable inside this prototype. Today, "checking the Alerts tab" (and
-  the red badge count on the nav bar) is the notification.
-- The native apps have no backend of their own bundled in — they're a
-  WebView shell pointed at wherever `server/server.js` happens to be
-  running (configurable from the in-app ⚙️ Settings screen). That's a
-  realistic shape for the real product too: the phone app talks to a
-  backend that does the actual POS integration, it doesn't run Node on
-  the device.
-
-## The retail vs. restaurant data problem, explained
-
-A grocery store's POS sells the exact thing that gets restocked — a can of
-Coke sold is a can of Coke to reorder. One sales-history feed is enough.
-
-A restaurant's POS only ever records **dish** sales ("2x Cheeseburger"). It
-has no idea that a cheeseburger consumes one bun, one beef patty, and a
-slice of cheese, because the POS was never told the recipe. So restocking a
-restaurant kitchen needs one extra piece that retail doesn't:
-**`restaurant-recipes.json`**, a one-time, manually-entered mapping of
-dish → ingredients → quantity per order. Once that mapping exists, ingredient
-usage can be derived automatically from dish sales forever — but a real
-deployment would need each restaurant to enter their own recipes once during
-onboarding. This app ships with 10 sample recipes already filled in so the
-math can be demonstrated end-to-end; a real customer's kitchen would need
-their own.
-
-This is also why restaurant "stock on hand" is a **derived estimate**, not a
-number read from a device: nobody scans a chicken breast in the walk-in the
-way a UPC gets scanned at checkout. The same par-level-minus-usage-since-
-restock model used for retail applies here, but it's one layer more
-removed from ground truth — worth flagging to a restaurant customer rather
-than presenting as exact.
-
-## API
-
-All endpoints are read-only, seeded from the JSON files in `server/seed-data/`.
-
-**Retail:** `GET /api/retail/products` · `GET /api/retail/products/:id`
-(day-wise sales this month + restock projection) · `GET /api/retail/alerts`
-
-**Restaurant:** `GET /api/restaurant/dishes` · `GET /api/restaurant/dishes/:id`
-(day-wise sales + recipe) · `GET /api/restaurant/ingredients` ·
-`GET /api/restaurant/ingredients/:id` · `GET /api/restaurant/alerts`
-
-**Both:** `GET /healthz`
-
-## What "80% depleted" means here
-
-`alertLevel` is `"critical"` once current stock falls to ≤20% of par level
-(i.e., 80% depleted), `"watch"` once the projected depletion date is within
-the item's restock lead time plus a 3-day buffer (so slow-lead-time items
-get flagged earlier — a 6-day-lead item needs more warning than a 1-day one),
-and `"ok"` otherwise. `restockOverdue` is true when there's no longer enough
-runway left to place an order and have it arrive before stockout.
-
 ## Next steps toward a real product
 
 1. Pick one POS to integrate for real first — Square is the most
    self-serve (published REST API, developer account, no partner
    agreement needed) — and replace `pos-connectors/square.js`'s two
-   functions with real API calls.
-2. Design the recipe-entry onboarding flow for restaurants — this is a
-   real product-design problem, not just a data-entry form, since most
-   restaurant owners won't know exact per-dish quantities by heart.
+   functions with real API calls so sales record automatically instead of
+   via manual entry/upload.
+2. Persist state to a real database instead of in-memory, so stock levels
+   survive a server restart.
 3. Decide on notification delivery: email/SMS alerts are achievable
    immediately with a service like SendGrid/Twilio and don't require an
    app-store deployment; native push is the "real app" path but is a
    materially bigger lift (see above).
-4. Validate the $20-50/month price point directly with a handful of
-   independent grocers and restaurant owners before building further —
-   this repo has not done that validation yet.
+4. Validate the 50%-restock-threshold and lead-time assumptions with a real
+   store owner — this repo has not done that validation yet.
 
 ---
-*Built via conversation with Claude, September 2026, as a working prototype
-following the strategic research in the neighboring Restaurant Services
-repo. Every "real vs. placeholder" claim above was checked against the
-actual code, not assumed.*
+*Restaurant support (recipe-based ingredient tracking) was explored in an
+earlier iteration of this repo and removed to keep this build focused on
+the retail/grocery bill-upload flow — see git history if that's needed
+again as a separate product.*

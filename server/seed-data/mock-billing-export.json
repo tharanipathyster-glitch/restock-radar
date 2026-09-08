@@ -1,0 +1,19 @@
+{
+  "_comment": "Sample output from a store billing system, standing in for a real POS export. Upload this file from the app's Record Sale screen to see stock get decremented automatically. Quantities are in lbs and roughly proportional to each item's typical sales mix.",
+  "billId": "INV-2026-0908-001",
+  "date": "2026-09-08",
+  "items": [
+    { "item": "Tomatoes", "quantitySold": 62 },
+    { "item": "Onions", "quantitySold": 70 },
+    { "item": "Chillis", "quantitySold": 55 },
+    { "item": "Toor Dhal", "quantitySold": 210 },
+    { "item": "Sona Masuri Rice", "quantitySold": 340 },
+    { "item": "Ghee", "quantitySold": 28 },
+    { "item": "Mustard Oil", "quantitySold": 22 },
+    { "item": "Parle G Biscuits", "quantitySold": 6 },
+    { "item": "Amul Paneer", "quantitySold": 80 },
+    { "item": "Bitter Gourd", "quantitySold": 90 },
+    { "item": "Capsicum", "quantitySold": 100 },
+    { "item": "Chilli Powder", "quantitySold": 60 }
+  ]
+}
