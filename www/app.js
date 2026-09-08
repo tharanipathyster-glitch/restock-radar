@@ -169,7 +169,7 @@ function attachRowOpeners(container) {
   });
 }
 
-function last5DaysBlock(last5Days) {
+function last5DaysBlock(last5Days, unit) {
   if (!last5Days.hasAnySales) {
     return `<div class="empty-state" style="padding:14px 0">No Data yet</div>`;
   }
@@ -178,20 +178,22 @@ function last5DaysBlock(last5Days) {
       .map(
         (d) => `<div class="daywise-cell">
           <div class="daywise-date">${fmtDate(d.date).replace(/, \d{4}$/, "")}</div>
-          <div class="daywise-qty">${d.quantitySold}</div>
+          <div class="daywise-qty">${num(d.quantitySold)}</div>
+          <div class="daywise-unit">${unit || "unit"}</div>
         </div>`
       )
       .join("")}
   </div>`;
 }
 
-function weekdayBlock(weekdayAverages) {
+function weekdayBlock(weekdayAverages, unit) {
   return `<div class="daywise-grid">
     ${weekdayAverages
       .map(
         (w) => `<div class="daywise-cell">
           <div class="daywise-date">${w.day.slice(0, 3)}</div>
-          <div class="daywise-qty">${w.avgSold}</div>
+          <div class="daywise-qty">${num(w.avgSold)}</div>
+          <div class="daywise-unit">${unit || "unit"}</div>
         </div>`
       )
       .join("")}
@@ -289,12 +291,12 @@ async function renderProductDetail(id) {
         <div class="stat-box"><div class="label">Restock lead time</div><div class="value">${num(p.restockLeadDays)}d</div></div>
       </div>
       <div class="card">
-        <h3>Last 5 days — quantity sold</h3>
-        ${last5DaysBlock(p.last5Days)}
+        <h3>Last 5 days — quantity sold (${p.unit || "unit"})</h3>
+        ${last5DaysBlock(p.last5Days, p.unit)}
       </div>
       <div class="card">
-        <h3>30-day weekday average sold</h3>
-        ${weekdayBlock(p.weekdayAverages)}
+        <h3>30-day weekday average sold (${p.unit || "unit"})</h3>
+        ${weekdayBlock(p.weekdayAverages, p.unit)}
       </div>
       <div class="footnote">Last restocked ${fmtDate(p.lastRestockDate)}.</div>
     </div>`;
