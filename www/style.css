@@ -518,3 +518,36 @@ html, body {
   cursor: pointer;
   padding: 10px;
 }
+
+/* ---- day-wise / weekday grids (product detail) ---- */
+
+.daywise-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  gap: 8px;
+}
+
+.daywise-cell {
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 8px 4px;
+  text-align: center;
+}
+
+.daywise-date {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.daywise-qty {
+  font-size: 16px;
+  font-weight: 800;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+textarea {
+  resize: vertical;
+}

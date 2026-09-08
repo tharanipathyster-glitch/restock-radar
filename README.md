@@ -1,20 +1,23 @@
 # Restock Radar
 
-A phone-friendly app for an independent grocery/retail store that tracks
-stock against a known baseline and tells you **what needs restocking now**
-— triggered once an item's stock drops below 50% of its initial level, with
-a tentative restock date based on that item's own lead time. Stock changes
-come from recording sales, either typed in by hand or uploaded as a bill
-file shaped like a real billing system's export.
+A phone-friendly app for an independent grocery/retail store that tallies
+current stock against sales as they happen and tells you **what needs
+restocking now** — per product, against a threshold *you* set (not a fixed
+global rule). Backed by a real SQLite database, not seed files, so
+recorded sales, uploaded bills, and threshold edits all persist across
+restarts.
 
 ## Run it
 
 ```bash
 cd server
 npm install
-npm run seed      # regenerates server/seed-data/retail-products.json from Testing File.xlsx
 npm start         # serves the API + frontend on http://localhost:3001
 ```
+
+Requires **Node 22.5+** (uses the built-in `node:sqlite` module — no native
+DB dependency to compile). The database seeds itself automatically on
+first run; see "Test data" below.
 
 Open `http://localhost:3001` in a phone browser (or resize a desktop browser
 to phone width) — it's a single responsive page, no separate mobile build.
@@ -23,34 +26,70 @@ to phone width) — it's a single responsive page, no separate mobile build.
 
 ## How it works
 
-1. **Product catalog + initial stock** come from the store's own billing
-   data — transcribed in `server/generate-seed-data.js` from
-   `Testing File.xlsx` (Item / Quantity in Lbs / Cost / Restock Time). That
-   initial quantity is the 100% baseline every alert is measured against.
-2. **Record a sale** (the "Record Sale" tab) two ways:
-   - Type in quantities sold per product by hand, or
-   - Upload a bill file — `POST /api/retail/upload-bill` accepts JSON
-     shaped like `server/seed-data/mock-billing-export.json` (a mocked
-     example of what a real billing/POS system's export would look like).
-     Use "Download sample bill" in the app to grab that exact file and
-     upload it right back to see the flow end-to-end.
-3. Either path decrements `currentStock` for the matching products and logs
-   a transaction (visible under "Recent activity" on the Record Sale tab).
-4. Once a product's `currentStock` falls below **50%** of its
-   `initialStock`, it's flagged `critical` — "Restock now" — with a
-   tentative restock date of today plus that product's own
-   `restockLeadDays` (from the Testing File's "Restock Time" column).
-   Below 70% it's flagged `watch` as an early warning.
+Two separate flows change stock, matching how a real store actually
+operates — selling inventory and receiving inventory are different events:
 
-State lives in memory in `server.js` and resets when the server restarts —
-intentional for a prototype/test build. `POST /api/retail/reset` also
-resets every product back to its initial stock level on demand (used by
-the "Reset demo data" button in the app).
+1. **Record Sale tab — a sale decreases stock.** Type in quantities sold by
+   hand, or upload a bill file shaped like
+   `server/seed-data/mock-billing-export.json` (a mocked example of a
+   billing-system export — use "Download sample bill" to grab it and
+   upload it right back to see the flow end-to-end).
+2. **Reports tab — "Upload the latest inventory received" increases stock.**
+   This is a restock, not a sale: it raises `stocked`/`currentStock` and
+   resets the last-restock date. Two ways to do it:
+   - **Read with AI** — paste a supplier bill's text and an LLM
+     (OpenAI `gpt-4o-mini`) extracts the line items. Requires
+     `OPENAI_API_KEY` set on the server (see below); without it the
+     endpoint returns a clear "not configured" message rather than
+     failing silently.
+   - **Structured JSON upload** — no AI/API key needed, same idea as the
+     sales-bill upload but for restocks.
+   Either way, **new items on the bill become new tracked products
+   automatically** — the catalog isn't fixed to the 12 seeded items.
+3. Every product has its **own restock threshold** (default 50%, editable
+   and saved from the product detail screen). Once
+   `currentStock / stocked` drops below that product's threshold, it's
+   flagged **"Restock Needed"** — otherwise **"Stock Available"**.
+4. Each product also tracks **Last 5 Days** quantity sold and a **30-day
+   weekday average** (Mon–Sun), both computed from the sales history table
+   — visible on the product detail screen.
+5. **Reports tab** also has a one-click **Excel export** of the entire
+   database — a Products sheet (stock %, threshold, alert) and a Detail
+   sheet (last-5-days + weekday averages per product) — see "Daily Excel
+   report" below.
+
+All of this is backed by SQLite (`server/data/restock.db`, created
+automatically, gitignored as runtime state). `POST /api/retail/reset` wipes
+it and reseeds the 12 starting products for demoing repeatedly.
+
+### Enabling AI bill reading
+
+```bash
+# in server/, before npm start
+export OPENAI_API_KEY=sk-...        # macOS/Linux
+$env:OPENAI_API_KEY = "sk-..."      # Windows PowerShell
+```
+
+Without this set, "Read with AI" on the Reports tab returns a 501 with an
+explanation — the structured JSON upload option next to it works with no
+key at all, so the app is fully testable either way.
+
+## Daily Excel report
+
+`GET /api/retail/report.xlsx` (the "Download Excel report" button on the
+Reports tab) builds a workbook fresh from the current database:
+
+- **Products sheet** — Item, Stocked, Cost/Unit, Restock Time, Last Restock
+  Date, Current Stock, % Stock at Store, Restock Threshold, Alert — one row
+  per product, mirroring the spec's Output.xlsx layout.
+- **Detail sheet** — each product's Last 5 Days dates + quantities sold,
+  and its 30-day weekday-average sold, stacked per product.
+
+A same-day snapshot is also cached under `server/reports/` (gitignored) the
+first time it's requested each day, so there's a same-day archive to look
+back at even if you don't download it right away.
 
 ## Test data
-
-`Testing File.xlsx` (in the repo root, one level above `restock-radar/`) is
-the source of truth for the 12 seeded products:
 
 | Item | Initial stock (lbs) | Total cost | Restock time |
 |---|---|---|---|
@@ -73,39 +112,51 @@ converted to days (`weeks × 7`) for the tentative-restock-date math.
 ## API
 
 - `GET /api/retail/products` — full catalog with computed stock status
-- `GET /api/retail/products/:id` — single product detail
-- `GET /api/retail/alerts` — products currently `critical` or `watch`, sorted critical-first
-- `GET /api/retail/mock-bill` — sample billing-system export (same file the app's "Download sample bill" button fetches)
-- `GET /api/retail/transactions` — recent recorded sales (manual entries + uploaded bills)
-- `POST /api/retail/sales` — body `{ items: [{ id, quantitySold }] }` — manual sale entry
-- `POST /api/retail/upload-bill` — body shaped like `mock-billing-export.json` — bulk sale entry from a bill
-- `POST /api/retail/reset` — resets every product back to its initial stock level
+- `GET /api/retail/products/:id` — product detail incl. Last 5 Days + 30-day weekday averages
+- `PATCH /api/retail/products/:id/threshold` — body `{ thresholdPct }` (0–1) — saves that product's restock threshold
+- `GET /api/retail/alerts` — products currently below their own threshold ("Restock Needed")
+- `GET /api/retail/mock-bill` — sample sales-bill export (same file the app's "Download sample bill" button fetches)
+- `GET /api/retail/transactions` — recent recorded sales (manual, uploaded bill, or seed history)
+- `POST /api/retail/sales` — body `{ items: [{ id, quantitySold }] }` — manual sale entry (decreases stock)
+- `POST /api/retail/upload-bill` — body shaped like `mock-billing-export.json` — bulk sale entry from a bill (decreases stock)
+- `POST /api/retail/upload-inventory` — body `{ items: [{ item, quantity, unitCost? }] }` — structured restock, no AI needed (increases stock, can create new products)
+- `POST /api/retail/upload-inventory-llm` — body `{ text }` or `{ imageBase64 }` — same as above but the line items are read from free-form bill text/image by an LLM (needs `OPENAI_API_KEY`)
+- `GET /api/retail/report.xlsx` — downloads the Excel report described above
+- `POST /api/retail/reset` — wipes and reseeds the database back to the 12 starting products
 - `GET /healthz`
 
 ## What's real vs. placeholder
 
-**Real:** the 50%-of-baseline restock trigger, the tentative-restock-date
-math (today + that product's own lead time), the sale-recording and
-bill-upload endpoints, and the transaction log — all genuine calculations
-over whatever stock numbers exist at the time.
+**Real:** the per-product threshold comparison and "Restock Needed"/"Stock
+Available" alert, the Last 5 Days and 30-day weekday-average aggregations
+(read straight from the sales table), the sale-recording and
+inventory-upload endpoints (both structured and LLM-based), the Excel
+report generation, and SQLite persistence — all genuine over whatever data
+exists in the database at the time.
 
 **Placeholder:**
-- The 12-product catalog and its initial stock/cost/lead-time numbers come
-  from a manually-authored test spreadsheet (`Testing File.xlsx`), standing
-  in for a real billing-system product export.
+- The 12-product catalog and its starting stock/cost/lead-time numbers
+  (`server/seed.js`) come from a manually-authored test spreadsheet
+  (`Testing File.xlsx`), standing in for a real billing-system product
+  export. The 30 days of seeded sales history is synthetic/randomized so
+  the day-wise and weekday-average analytics have something to show from
+  first launch.
 - `server/pos-connectors/{square,clover}.js` — each documents what a real
   POS integration needs (OAuth flow, endpoint, field-mapping) and returns
   `null`. Wiring one of these up for real — so sales get recorded
   automatically instead of via manual entry/upload — is the natural next
   step once a specific POS is chosen.
+- The LLM bill reader (`server/llm-bill-parser.js`) is real code that
+  makes a real OpenAI API call, but needs your own `OPENAI_API_KEY` to run
+  — there's no key bundled with this repo. It also only reads text/images
+  passed to it directly; there's no OCR/photo-capture pipeline wired into
+  the app's UI yet, just a paste-text box.
 - Push notifications for the restock alert: not implemented. The app is
   wrapped in Capacitor (`android/`, `ios/` folders) so it installs as a
   real native app, but native push needs the Capacitor Push Notifications
   plugin plus Firebase Cloud Messaging (Android) / APNs (iOS) registration
   — a real backend push service and device to test on. Today, the red
   badge count on the Alerts tab is the notification.
-- State resets on server restart (in-memory only) — a real deployment
-  would persist to a database instead.
 
 ## Run it as a native Android / iOS app
 
@@ -190,7 +241,9 @@ doesn't run a Node server for you.
    [render.com](https://render.com) with GitHub, click **New → Blueprint**,
    pick this repo — Render will read the included `render.yaml` and deploy
    `server/` automatically. Once deployed you'll get a public URL like
-   `https://restock-radar.onrender.com`.
+   `https://restock-radar.onrender.com`. To enable AI bill reading there
+   too, add an `OPENAI_API_KEY` environment variable under that service's
+   **Environment** tab.
 3. **Point the app at it:** open the **⚙️ Settings** screen in the app
    (web or the installed native app), paste that Render URL in, tap
    "Test connection," then "Save." Anyone using the app — on any network —
@@ -198,7 +251,10 @@ doesn't run a Node server for you.
 
 Note: Render's free tier spins the service down after inactivity, so the
 first request after a while can take ~30-60s to wake it back up — expected
-on a free plan, not a bug.
+on a free plan, not a bug. Also note the free tier's filesystem isn't
+persistent across deploys, so `server/data/restock.db` resets on redeploy
+— fine for demoing, but a real deployment would want a persistent disk or
+an external database.
 
 ## Next steps toward a real product
 
@@ -207,14 +263,16 @@ on a free plan, not a bug.
    agreement needed) — and replace `pos-connectors/square.js`'s two
    functions with real API calls so sales record automatically instead of
    via manual entry/upload.
-2. Persist state to a real database instead of in-memory, so stock levels
-   survive a server restart.
-3. Decide on notification delivery: email/SMS alerts are achievable
+2. Move off Render's free-tier ephemeral filesystem to a persistent disk
+   or a managed Postgres/MySQL instance so the database survives redeploys.
+3. Add photo-capture for bill uploads (camera → image → LLM) instead of a
+   paste-text box, and OCR fallback for scanned/printed bills.
+4. Decide on notification delivery: email/SMS alerts are achievable
    immediately with a service like SendGrid/Twilio and don't require an
    app-store deployment; native push is the "real app" path but is a
    materially bigger lift (see above).
-4. Validate the 50%-restock-threshold and lead-time assumptions with a real
-   store owner — this repo has not done that validation yet.
+5. Validate the default 50%-restock-threshold with a real store owner per
+   product category — this repo has not done that validation yet.
 
 ---
 *Restaurant support (recipe-based ingredient tracking) was explored in an

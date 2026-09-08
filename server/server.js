@@ -1,133 +1,175 @@
 // Restock Radar — backend
 //
-// Retail-only inventory tracker. Product catalog + initial stock levels
-// come from the store's own billing-system export (server/seed-data/
-// retail-products.json, transcribed from Testing File.xlsx). From there,
-// stock only changes when a sale is recorded — either typed in manually
-// (POST /api/retail/sales) or uploaded as a bill matching the shape of
-// server/seed-data/mock-billing-export.json (POST /api/retail/upload-bill).
-// Once a product's stock drops below 50% of its initial level, it's flagged
-// "critical" with a tentative restock date based on that product's own
-// restock lead time — see analytics.js.
-//
-// State lives in memory and resets on restart; see README for why that's
-// an intentional simplification for this prototype, not an oversight.
+// Retail inventory tracker backed by SQLite (server/db.js). Two distinct
+// flows change stock, matching the spec:
+//   - "Record a sale" (manual entry or a billing-system bill) decrements
+//     currentStock — see /api/retail/sales and /api/retail/upload-bill.
+//   - "Upload the latest inventory received" (a restock bill, optionally
+//     read by an LLM) bumps stocked/currentStock and resets the last
+//     restock date — see /api/retail/upload-inventory and
+//     /api/retail/upload-inventory-llm. New products can be created this
+//     way, so the catalog is dynamic rather than fixed.
+// A product is flagged "Restock Needed" once currentStock/stocked drops
+// below that product's own (user-editable, saved) restock threshold.
 
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const { buildProductDetail, computeStockStatus } = require("./analytics");
+const db = require("./db");
+const { seedIfEmpty, TODAY } = require("./seed");
+const { buildProductSummary, buildProductDetail, dateStr } = require("./analytics");
+const { parseBillWithLLM } = require("./llm-bill-parser");
+const { getDailyReportBuffer, getFreshReportBuffer } = require("./report");
 
-const SEED_PRODUCTS = require("./seed-data/retail-products.json");
+seedIfEmpty();
+
 const MOCK_BILL = require("./seed-data/mock-billing-export.json");
 
-const TODAY = new Date("2026-09-08"); // fixed "today" so the demo is reproducible
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: "10mb" })); // generous limit for base64 bill photos
+app.use(express.static(path.join(__dirname, "../www")));
 
-// Mutable in-memory copy of the seed data — this is what actually changes
-// as sales get recorded, leaving the seed-data JSON files untouched.
-const products = SEED_PRODUCTS.map((p) => ({ ...p }));
-const transactions = []; // { id, date, source: "manual"|"bill", billId?, items: [{productId, name, quantitySold}] }
-
-function findProduct(idOrName) {
-  const needle = String(idOrName).trim().toLowerCase();
-  return products.find((p) => p.id.toLowerCase() === needle || p.name.toLowerCase() === needle);
-}
-
-function applySale(items, source, billId) {
+function applySaleItems(items, source, billId) {
   const applied = [];
   const unmatched = [];
   items.forEach((entry) => {
-    const product = findProduct(entry.id || entry.item);
-    const qty = Number(entry.quantitySold);
+    const product = db.findProduct(entry.id || entry.item);
+    const qty = Number(entry.quantitySold ?? entry.quantity);
     if (!product || !Number.isFinite(qty) || qty <= 0) {
       unmatched.push(entry);
       return;
     }
-    product.currentStock = Math.max(0, Math.round((product.currentStock - qty) * 100) / 100);
+    db.recordSale(product.id, dateStr(TODAY), qty, source, billId);
     applied.push({ productId: product.id, name: product.name, quantitySold: qty });
   });
-  if (applied.length) {
-    transactions.unshift({
-      id: `TXN-${Date.now()}`,
-      date: TODAY.toISOString().slice(0, 10),
-      source,
-      billId: billId || null,
-      items: applied,
-    });
-  }
   return { applied, unmatched };
 }
 
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "../www")));
+function applyInventoryItems(items) {
+  const applied = [];
+  const skipped = [];
+  items.forEach((entry) => {
+    const name = entry.item || entry.name;
+    const qty = Number(entry.quantity ?? entry.quantitySold);
+    if (!name || !Number.isFinite(qty) || qty <= 0) {
+      skipped.push(entry);
+      return;
+    }
+    const result = db.applyInventoryLine(
+      { name, quantity: qty, unitCost: entry.unitCost ? Number(entry.unitCost) : null },
+      dateStr(TODAY)
+    );
+    applied.push(result);
+  });
+  return { applied, skipped };
+}
+
+// ---------------------------------------------------------------- READS ---
 
 app.get("/api/retail/products", (req, res) => {
-  res.json(products.map((p) => buildProductDetail(p, TODAY)));
+  res.json(db.allProducts().map(buildProductSummary));
 });
 
 app.get("/api/retail/products/:id", (req, res) => {
-  const product = findProduct(req.params.id);
+  const product = db.findProduct(req.params.id);
   if (!product) return res.status(404).json({ error: "Product not found" });
   res.json(buildProductDetail(product, TODAY));
 });
 
 app.get("/api/retail/alerts", (req, res) => {
-  const alerts = products
-    .map((p) => buildProductDetail(p, TODAY))
-    .filter((p) => p.alertLevel !== "ok")
-    .sort((a, b) => {
-      if (a.alertLevel !== b.alertLevel) return a.alertLevel === "critical" ? -1 : 1;
-      return a.pctRemaining - b.pctRemaining;
-    });
+  const alerts = db
+    .allProducts()
+    .map(buildProductSummary)
+    .filter((p) => p.alertLevel === "critical")
+    .sort((a, b) => a.pctStock - b.pctStock);
   res.json(alerts);
 });
 
-// Sample of what a real billing-system export looks like — used both to
-// demonstrate the shape and as a ready-made file to test the upload feature
-// with (GET this, save it, then upload it back via /api/retail/upload-bill).
+app.get("/api/retail/transactions", (req, res) => res.json(db.recentTransactions(50)));
+
 app.get("/api/retail/mock-bill", (req, res) => res.json(MOCK_BILL));
 
-app.get("/api/retail/transactions", (req, res) => res.json(transactions.slice(0, 50)));
+// ------------------------------------------------------------- THRESHOLD --
 
-// Manual entry: { items: [{ id, quantitySold }] }
+app.patch("/api/retail/products/:id/threshold", (req, res) => {
+  const product = db.findProduct(req.params.id);
+  if (!product) return res.status(404).json({ error: "Product not found" });
+  const pct = Number(req.body.thresholdPct);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 1) {
+    return res.status(400).json({ error: "thresholdPct must be a number between 0 and 1" });
+  }
+  db.setThreshold(product.id, pct);
+  res.json(buildProductDetail(db.findProduct(product.id), TODAY));
+});
+
+// -------------------------------------------------------- RECORD A SALE ---
+
 app.post("/api/retail/sales", (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "No items provided" });
-  const { applied, unmatched } = applySale(items, "manual");
-  res.json({ applied, unmatched, products: products.map((p) => buildProductDetail(p, TODAY)) });
+  const { applied, unmatched } = applySaleItems(items, "manual");
+  res.json({ applied, unmatched, products: db.allProducts().map(buildProductSummary) });
 });
 
-// Bill upload: same shape as mock-billing-export.json — { billId, date, items: [{ item, quantitySold }] }
 app.post("/api/retail/upload-bill", (req, res) => {
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: "Bill has no items" });
-  const { applied, unmatched } = applySale(items, "bill", req.body.billId);
-  res.json({ applied, unmatched, products: products.map((p) => buildProductDetail(p, TODAY)) });
+  const { applied, unmatched } = applySaleItems(items, "bill", req.body.billId);
+  res.json({ applied, unmatched, products: db.allProducts().map(buildProductSummary) });
 });
 
-// Convenience for demoing repeatedly — puts every product back to its
-// initial stock level from Testing File.xlsx.
+// ---------------------------------------------------- INVENTORY RECEIVED --
+
+// Structured fallback — no LLM/API key required. Body: { items: [{ item, quantity, unitCost? }] }
+app.post("/api/retail/upload-inventory", (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "No items provided" });
+  const { applied, skipped } = applyInventoryItems(items);
+  res.json({ applied, skipped, products: db.allProducts().map(buildProductSummary) });
+});
+
+// LLM-read version. Body: { text } or { imageBase64 } (data URL). Requires OPENAI_API_KEY.
+app.post("/api/retail/upload-inventory-llm", async (req, res) => {
+  try {
+    const items = await parseBillWithLLM({ text: req.body.text, imageBase64: req.body.imageBase64 });
+    if (!items.length) return res.status(422).json({ error: "Couldn't find any product lines in that bill." });
+    const { applied, skipped } = applyInventoryItems(items);
+    res.json({ applied, skipped, rawItems: items, products: db.allProducts().map(buildProductSummary) });
+  } catch (err) {
+    const status = err.code === "LLM_NOT_CONFIGURED" ? 501 : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// ------------------------------------------------------------- REPORTS ---
+
+app.get("/api/retail/report.xlsx", (req, res) => {
+  const buffer = req.query.fresh === "false" ? getDailyReportBuffer(TODAY) : getFreshReportBuffer(TODAY);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="restock-report-${dateStr(TODAY)}.xlsx"`);
+  res.send(buffer);
+});
+
+// ------------------------------------------------------------------ MISC -
+
 app.post("/api/retail/reset", (req, res) => {
-  products.forEach((p, i) => {
-    p.currentStock = SEED_PRODUCTS[i].currentStock;
-  });
-  transactions.length = 0;
-  res.json({ ok: true, products: products.map((p) => buildProductDetail(p, TODAY)) });
+  db.resetAll();
+  seedIfEmpty();
+  res.json({ ok: true, products: db.allProducts().map(buildProductSummary) });
 });
 
 app.get("/healthz", (req, res) =>
   res.json({
     ok: true,
-    today: TODAY.toISOString().slice(0, 10),
-    posIntegrationsConfigured: false,
-    retailProducts: products.length,
+    today: dateStr(TODAY),
+    llmConfigured: Boolean(process.env.OPENAI_API_KEY),
+    retailProducts: db.allProducts().length,
   })
 );
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Restock Radar backend listening on :${PORT}`);
-  console.log("POS integrations configured: false (running on seed data — see pos-connectors/)");
+  console.log(`LLM bill reading configured: ${Boolean(process.env.OPENAI_API_KEY)} (set OPENAI_API_KEY to enable)`);
 });

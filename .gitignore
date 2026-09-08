@@ -1,6 +1,10 @@
 node_modules/
 *.log
 
+# Runtime state (SQLite DB + generated reports) — not source
+server/data/
+server/reports/
+
 # Capacitor native build output
 android/app/build/
 android/.gradle/

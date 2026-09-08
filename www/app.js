@@ -1,12 +1,16 @@
-// Restock Radar — frontend (retail/grocery only)
+// Restock Radar — frontend (retail/grocery)
 //
-// Plain JS, no framework/build step. All data comes from the /api/retail
-// endpoints in server.js. Stock only ever changes when a sale is recorded
-// (Record Sale tab) — either typed in by hand or uploaded as a bill file
-// shaped like server/seed-data/mock-billing-export.json.
+// Plain JS, no framework/build step. Two things change stock:
+//  - Record Sale: manual quantity entry or an uploaded sales bill
+//    (decrements stock) — see /api/retail/sales, /api/retail/upload-bill
+//  - Upload Inventory Received: a restock bill, either pasted as text and
+//    read by an LLM, or a structured JSON fallback (increments stock,
+//    can create new products) — see /api/retail/upload-inventory[-llm]
+// Each product has its own editable, saved restock threshold — alert flips
+// to "Restock Needed" once % stock at store drops below it.
 
 const state = {
-  tab: "alerts", // "alerts" | "products" | "record"
+  tab: "alerts", // "alerts" | "products" | "record" | "reports"
   detail: null, // { kind: "product", id } | { kind: "settings" }
   cache: {},
 };
@@ -15,9 +19,6 @@ const screenEl = document.getElementById("screen");
 const navEl = document.getElementById("bottomNav");
 const settingsBtnEl = document.getElementById("settingsBtn");
 
-// Native app shells (Capacitor on Android/iOS) load this page from a
-// bundled origin, so relative /api/... calls can't reach the Express
-// backend the way they can on the web build.
 function apiBase() {
   const saved = localStorage.getItem("restockApiBase");
   if (saved !== null) return saved.replace(/\/$/, "");
@@ -58,10 +59,10 @@ async function getJSON(url) {
   return data;
 }
 
-async function postJSON(url, body) {
+async function sendJSON(method, url, body) {
   const fullUrl = url.startsWith("/api") ? apiBase() + url : url;
   const res = await fetch(fullUrl, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -69,6 +70,8 @@ async function postJSON(url, body) {
   if (!res.ok) throw new Error(data.error || `Server returned an error (${res.status}).`);
   return data;
 }
+const postJSON = (url, body) => sendJSON("POST", url, body);
+const patchJSON = (url, body) => sendJSON("PATCH", url, body);
 
 // ---------------------------------------------------------------- NAV -----
 
@@ -77,6 +80,7 @@ function renderNav() {
     { tab: "alerts", icon: "⚠️", label: "Alerts" },
     { tab: "products", icon: "🧺", label: "Products" },
     { tab: "record", icon: "🧾", label: "Record Sale" },
+    { tab: "reports", icon: "📊", label: "Reports" },
   ];
 
   navEl.innerHTML = items
@@ -98,10 +102,9 @@ function renderNav() {
     .then((alerts) => {
       const badge = navEl.querySelector('[data-badge="alerts"]');
       if (!badge) return;
-      const criticalCount = alerts.filter((a) => a.alertLevel === "critical").length;
-      if (criticalCount > 0) {
+      if (alerts.length > 0) {
         badge.hidden = false;
-        badge.textContent = criticalCount;
+        badge.textContent = alerts.length;
       } else {
         badge.hidden = true;
       }
@@ -117,15 +120,7 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-function restockChip(item) {
-  if (!item.needsRestockNow) {
-    return `<span class="restock-date-chip ok">✅ Stock healthy</span>`;
-  }
-  return `<span class="restock-date-chip overdue">⏰ Restock now — arrives ~${fmtDate(item.tentativeRestockDate)}</span>`;
-}
-
-function barRow({ id, name, sub, pctRemaining, alertLevel }) {
-  const pillLabel = alertLevel === "critical" ? "Restock now" : alertLevel === "watch" ? "Watch" : "OK";
+function barRow({ id, name, sub, pctStock, alertLevel, alertLabel }) {
   return `
     <div class="row-card" data-open="product:${id}">
       <div class="row-top">
@@ -133,11 +128,11 @@ function barRow({ id, name, sub, pctRemaining, alertLevel }) {
           <div class="row-name">${name}</div>
           <div class="row-cat">${sub}</div>
         </div>
-        <span class="pill ${alertLevel}">${pillLabel}</span>
+        <span class="pill ${alertLevel}">${alertLabel}</span>
       </div>
-      <div class="bar-track"><div class="bar-fill ${alertLevel}" style="width:${Math.min(100, Math.max(2, pctRemaining))}%"></div></div>
+      <div class="bar-track"><div class="bar-fill ${alertLevel}" style="width:${Math.min(100, Math.max(2, pctStock))}%"></div></div>
       <div class="row-meta">
-        <span>${pctRemaining.toFixed(0)}% of initial stock remaining</span>
+        <span>${pctStock.toFixed(0)}% of stocked baseline</span>
       </div>
     </div>`;
 }
@@ -151,6 +146,35 @@ function attachRowOpeners(container) {
   });
 }
 
+function last5DaysBlock(last5Days) {
+  if (!last5Days.hasAnySales) {
+    return `<div class="empty-state" style="padding:14px 0">No Data yet</div>`;
+  }
+  return `<div class="daywise-grid">
+    ${last5Days.days
+      .map(
+        (d) => `<div class="daywise-cell">
+          <div class="daywise-date">${fmtDate(d.date).replace(/, \d{4}$/, "")}</div>
+          <div class="daywise-qty">${d.quantitySold}</div>
+        </div>`
+      )
+      .join("")}
+  </div>`;
+}
+
+function weekdayBlock(weekdayAverages) {
+  return `<div class="daywise-grid">
+    ${weekdayAverages
+      .map(
+        (w) => `<div class="daywise-cell">
+          <div class="daywise-date">${w.day.slice(0, 3)}</div>
+          <div class="daywise-qty">${w.avgSold}</div>
+        </div>`
+      )
+      .join("")}
+  </div>`;
+}
+
 // -------------------------------------------------------------- SCREENS ---
 
 async function renderAlerts() {
@@ -162,21 +186,20 @@ async function renderAlerts() {
 
   const listEl = document.getElementById("alertList");
   if (!alerts.length) {
-    listEl.innerHTML = `<div class="empty-state"><div class="big">✅</div>Everything is above the 50% restock line right now.</div>`;
+    listEl.innerHTML = `<div class="empty-state"><div class="big">✅</div>Every product is above its own restock threshold right now.</div>`;
     return;
   }
   listEl.innerHTML = alerts
     .map(
       (a) => `
-      <div class="alert-card ${a.alertLevel}" data-open="product:${a.id}">
+      <div class="alert-card critical" data-open="product:${a.id}">
         <div class="alert-top">
           <span class="alert-name">${a.name}</span>
-          <span class="pill ${a.alertLevel}">${a.alertLevel === "critical" ? "Critical" : "Watch"}</span>
+          <span class="pill critical">Restock Needed</span>
         </div>
         <div class="alert-detail">
-          <b>${a.pctRemaining.toFixed(0)}%</b> of initial stock remaining (${a.currentStock} of ${a.initialStock} ${a.unit})
+          <b>${a.pctStock.toFixed(0)}%</b> of stocked baseline remaining (${a.currentStock} of ${a.stocked} ${a.unit}) — threshold is ${(a.thresholdPct * 100).toFixed(0)}%
         </div>
-        ${restockChip(a)}
       </div>`
     )
     .join("");
@@ -195,9 +218,10 @@ async function renderProducts() {
       barRow({
         id: p.id,
         name: p.name,
-        sub: `$${p.unitCost.toFixed(2)}/${p.unit} · restock takes ${p.restockLeadDays}d`,
-        pctRemaining: p.pctRemaining,
+        sub: `$${p.unitCost.toFixed(2)}/${p.unit} · restock takes ${p.restockLeadDays}d · threshold ${(p.thresholdPct * 100).toFixed(0)}%`,
+        pctStock: p.pctStock,
         alertLevel: p.alertLevel,
+        alertLabel: p.alertLabel,
       })
     )
     .join("");
@@ -213,49 +237,71 @@ async function renderProductDetail(id) {
     <div class="detail-header"><button class="back-btn" id="backBtn">← Back</button><span class="title">${p.name}</span></div>
     <div class="detail-body">
       <div class="banner ${p.alertLevel}">
-        <span class="emoji">${p.alertLevel === "critical" ? "🚨" : p.alertLevel === "watch" ? "👀" : "✅"}</span>
-        <div>${
-          p.alertLevel === "critical"
-            ? `Below 50% of initial stock — restock now. A reorder placed today would arrive around <b>${fmtDate(p.tentativeRestockDate)}</b>.`
-            : p.alertLevel === "watch"
-            ? "Getting low — keep an eye on this one."
-            : "Stock level is healthy relative to the initial baseline."
-        }</div>
+        <span class="emoji">${p.alertLevel === "critical" ? "🚨" : "✅"}</span>
+        <div>${p.alertLabel} — currently <b>${p.pctStock.toFixed(0)}%</b> of the ${p.stocked} ${p.unit} stocked baseline, threshold is ${(p.thresholdPct * 100).toFixed(0)}%.</div>
       </div>
       <div class="card">
         <h3>Stock level</h3>
         <div class="big-bar-track">
-          <div class="big-bar-fill ${p.alertLevel}" style="width:${Math.min(100, Math.max(6, p.pctRemaining))}%">${p.pctRemaining.toFixed(0)}%</div>
+          <div class="big-bar-fill ${p.alertLevel}" style="width:${Math.min(100, Math.max(6, p.pctStock))}%">${p.pctStock.toFixed(0)}%</div>
         </div>
-        <div class="stock-caption"><span>${p.currentStock} ${p.unit} on hand</span><span>initial ${p.initialStock} ${p.unit}</span></div>
+        <div class="stock-caption"><span>${p.currentStock} ${p.unit} on hand</span><span>stocked ${p.stocked} ${p.unit}</span></div>
+      </div>
+      <div class="card">
+        <h3>Restock threshold</h3>
+        <p class="footnote" style="margin-top:0; padding:0 0 8px">Alert flips to "Restock Needed" once % stock at store drops below this.</p>
+        <div style="display:flex; align-items:center; gap:10px">
+          <input id="thresholdInput" type="number" min="0" max="100" step="1" value="${Math.round(p.thresholdPct * 100)}" style="width:80px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); font-size:15px" />
+          <span>%</span>
+          <button id="saveThresholdBtn" class="btn-primary">Save</button>
+        </div>
+        <div id="thresholdStatus" class="footnote" style="margin-top:8px"></div>
       </div>
       <div class="stat-grid">
         <div class="stat-box"><div class="label">Cost per ${p.unit}</div><div class="value">$${p.unitCost.toFixed(2)}</div></div>
         <div class="stat-box"><div class="label">Restock lead time</div><div class="value">${p.restockLeadDays}d</div></div>
       </div>
       <div class="card">
-        <h3>Restock timing</h3>
-        ${restockChip(p)}
-        <div class="kv-list" style="margin-top:12px">
-          <div class="kv-row"><span class="k">Tentative restock date</span><span class="v">${fmtDate(p.tentativeRestockDate)}</span></div>
-          <div class="kv-row"><span class="k">Initial stock recorded</span><span class="v">${fmtDate(p.lastRestockedDate)}</span></div>
-        </div>
+        <h3>Last 5 days — quantity sold</h3>
+        ${last5DaysBlock(p.last5Days)}
       </div>
-      <div class="footnote">SKU ${p.sku} · Restock triggers automatically once stock drops below 50% of the initial ${p.initialStock} ${p.unit} baseline.</div>
+      <div class="card">
+        <h3>30-day weekday average sold</h3>
+        ${weekdayBlock(p.weekdayAverages)}
+      </div>
+      <div class="footnote">Last restocked ${fmtDate(p.lastRestockDate)}.</div>
     </div>`;
   document.getElementById("backBtn").addEventListener("click", closeDetail);
+
+  document.getElementById("saveThresholdBtn").onclick = async () => {
+    const statusEl = document.getElementById("thresholdStatus");
+    const pct = parseFloat(document.getElementById("thresholdInput").value) / 100;
+    if (!Number.isFinite(pct) || pct < 0 || pct > 1) {
+      statusEl.textContent = "Enter a number between 0 and 100.";
+      return;
+    }
+    statusEl.textContent = "Saving…";
+    try {
+      await patchJSON(`/api/retail/products/${id}/threshold`, { thresholdPct: pct });
+      state.cache = {};
+      statusEl.textContent = "✅ Saved.";
+      renderProductDetail(id);
+    } catch (err) {
+      statusEl.textContent = `❌ ${err.message}`;
+    }
+  };
 }
 
 // --------------------------------------------------------- RECORD SALE ----
 
 async function renderRecordSale() {
   screenEl.innerHTML = `
-    <div class="section-header"><h2>Record Sale</h2><span class="sub">updates stock</span></div>
+    <div class="section-header"><h2>Record Sale</h2><span class="sub">decreases stock</span></div>
     <div class="detail-body" style="padding-top:0">
       <div class="card">
-        <h3>Upload a bill</h3>
+        <h3>Upload a sales bill</h3>
         <p class="footnote" style="margin-top:0; padding:0 0 10px">
-          Upload a JSON bill exported from a billing system (same shape as the sample below) to apply every line item's quantity against stock in one go.
+          Upload a JSON bill (same shape as the sample below) to apply every line item's quantity against stock.
         </p>
         <div style="display:flex; gap:10px; flex-wrap:wrap">
           <label class="btn-primary" style="cursor:pointer">
@@ -354,12 +400,81 @@ async function renderRecordSale() {
       .map(
         (t) => `
         <div class="kv-row">
-          <span class="k">${t.source === "bill" ? "📄 Bill" : "✍️ Manual"} · ${t.date}</span>
-          <span class="v">${t.items.map((i) => `${i.name} ×${i.quantitySold}`).join(", ")}</span>
+          <span class="k">${t.source === "bill" ? "📄 Bill" : t.source === "manual" ? "✍️ Manual" : "🌱 Seed"} · ${t.date}</span>
+          <span class="v">${t.productName} ×${t.quantitySold}</span>
         </div>`
       )
       .join("");
   }
+}
+
+// ------------------------------------------------------------- REPORTS ----
+
+async function renderReports() {
+  screenEl.innerHTML = `
+    <div class="section-header"><h2>Reports</h2><span class="sub">Excel export</span></div>
+    <div class="detail-body" style="padding-top:0">
+      <div class="card">
+        <h3>Download today's stock report</h3>
+        <p class="footnote" style="margin-top:0; padding:0 0 10px">
+          A spreadsheet with every product's stock %, threshold, and alert on one sheet, and Last 5 Days / 30-day weekday-average sales on a Detail sheet — built fresh from the current database.
+        </p>
+        <button id="downloadReportBtn" class="btn-primary">⬇️ Download Excel report</button>
+      </div>
+      <div class="card">
+        <h3>Upload the latest inventory received</h3>
+        <p class="footnote" style="margin-top:0; padding:0 0 10px">
+          This is a <b>restock</b>, not a sale — it raises stock and resets the last-restock date. New items on the bill become new tracked products automatically.
+        </p>
+        <h4 style="margin:0 0 6px; font-size:12.5px; color:var(--muted)">Read with AI (paste bill text)</h4>
+        <textarea id="llmBillText" rows="4" placeholder="Paste the text of a supplier bill/invoice here…" style="width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--border); font-size:14px; font-family:inherit"></textarea>
+        <button id="parseLlmBtn" class="btn-primary" style="margin-top:8px">Read bill with AI</button>
+        <div id="llmStatus" class="footnote" style="margin-top:8px"></div>
+        <hr style="border:none; border-top:1px solid var(--border); margin:14px 0" />
+        <h4 style="margin:0 0 6px; font-size:12.5px; color:var(--muted)">Or upload structured JSON (no AI needed)</h4>
+        <label class="btn-secondary" style="cursor:pointer">
+          Upload inventory (.json)
+          <input id="inventoryFileInput" type="file" accept="application/json" style="display:none" />
+        </label>
+        <div id="inventoryStatus" class="footnote" style="margin-top:8px"></div>
+      </div>
+    </div>`;
+
+  document.getElementById("downloadReportBtn").onclick = () => {
+    window.open(apiBase() + "/api/retail/report.xlsx", "_blank");
+  };
+
+  document.getElementById("parseLlmBtn").onclick = async () => {
+    const statusEl = document.getElementById("llmStatus");
+    const text = document.getElementById("llmBillText").value.trim();
+    if (!text) {
+      statusEl.textContent = "Paste some bill text first.";
+      return;
+    }
+    statusEl.textContent = "Reading with AI…";
+    try {
+      const result = await postJSON("/api/retail/upload-inventory-llm", { text });
+      state.cache = {};
+      statusEl.textContent = `✅ Applied ${result.applied.length} item(s) from the bill.`;
+    } catch (err) {
+      statusEl.textContent = `❌ ${err.message}`;
+    }
+  };
+
+  document.getElementById("inventoryFileInput").addEventListener("change", async (e) => {
+    const statusEl = document.getElementById("inventoryStatus");
+    const file = e.target.files[0];
+    if (!file) return;
+    statusEl.textContent = "Reading file…";
+    try {
+      const parsed = JSON.parse(await file.text());
+      const result = await postJSON("/api/retail/upload-inventory", parsed);
+      state.cache = {};
+      statusEl.textContent = `✅ Applied ${result.applied.length} item(s) (${result.skipped.length} skipped).`;
+    } catch (err) {
+      statusEl.textContent = `❌ ${err.message || "Couldn't read that file."}`;
+    }
+  });
 }
 
 // ------------------------------------------------------------- SETTINGS ---
@@ -383,7 +498,7 @@ function renderSettings() {
         </div>
         <div id="apiBaseStatus" class="footnote" style="margin-top:10px"></div>
       </div>
-      <div class="footnote">Product catalog and initial stock come from the store's own billing-system export (Testing File.xlsx) — see README for what's real vs. placeholder.</div>
+      <div class="footnote">"Read with AI" on the Reports tab needs an OPENAI_API_KEY set on the server — that's a server-side setting, not something entered here.</div>
     </div>`;
   document.getElementById("backBtn").addEventListener("click", closeDetail);
 
@@ -431,6 +546,7 @@ async function render() {
     if (state.tab === "alerts") return await renderAlerts();
     if (state.tab === "products") return await renderProducts();
     if (state.tab === "record") return await renderRecordSale();
+    if (state.tab === "reports") return await renderReports();
   } catch (err) {
     renderConnectionError(err);
   }
