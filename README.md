@@ -244,14 +244,20 @@ doesn't run a Node server for you.
 2. **Deploy the backend on Render.com** (free tier): sign in to
    [render.com](https://render.com) with GitHub, click **New → Blueprint**,
    pick this repo — Render will read the included `render.yaml` and deploy
-   `server/` automatically. Once deployed you'll get a public URL like
-   `https://restock-radar.onrender.com`. To enable AI bill reading there
-   too, add an `OPENAI_API_KEY` environment variable under that service's
-   **Environment** tab.
+   `server/` automatically. Once deployed you'll get a public URL (the live
+   one for this repo is **`https://restock-radar-evch.onrender.com`**). To
+   enable AI bill reading there too, add an `OPENAI_API_KEY` environment
+   variable under that service's **Environment** tab.
+   - The Render service is **Blueprint managed**. After pushing new commits,
+     if it doesn't redeploy on its own, open the service → **Manual Deploy →
+     Deploy latest commit**, or turn on **Settings → Build & Deploy →
+     Auto-Deploy**. Check `/healthz` afterwards: the current build reports
+     `"retailProducts": 12` with no `restaurant*` fields.
 3. **Point the app at it:** open the **⚙️ Settings** screen in the app
    (web or the installed native app), paste that Render URL in, tap
    "Test connection," then "Save." Anyone using the app — on any network —
-   now hits the same live backend.
+   now hits the same live backend. (The web build opened directly at the
+   Render URL needs no Settings change — it uses relative `/api` calls.)
 
 Note: Render's free tier spins the service down after inactivity, so the
 first request after a while can take ~30-60s to wake it back up — expected
