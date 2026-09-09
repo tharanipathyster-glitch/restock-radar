@@ -17,8 +17,9 @@
 const MODEL = "gpt-4o-mini";
 
 const SYSTEM_PROMPT = `You read grocery/retail bills and invoices and extract line items as JSON.
-Return ONLY a JSON object: { "items": [ { "item": string, "quantity": number, "unitCost": number|null } ] }.
-"quantity" is the amount of stock received/purchased for that line (in whatever unit the bill uses, e.g. lbs).
+Return ONLY a JSON object: { "items": [ { "item": string, "quantity": number, "unit": string|null, "unitCost": number|null } ] }.
+"quantity" is the amount of stock received/purchased for that line.
+"unit" is the stocking unit that quantity is counted in, lowercased and singular — "lb", "kg", "pack", "tin", "bottle", "box", "each", etc. — inferred from the bill text; null if not stated.
 "unitCost" is cost per unit if it can be determined from the bill (total price divided by quantity), else null.
 Ignore taxes, totals, and non-product lines. If nothing usable is found, return { "items": [] }.`;
 
