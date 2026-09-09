@@ -7,3 +7,10 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /healthz
+    envVars:
+      # Optional — enables "Read a scanned bill / photo with AI" on the
+      # Reports tab. sync:false means Render never gets it from this file;
+      # set the real value in the dashboard (service → Environment).
+      # Without it the LLM endpoint returns a clear "not configured" message.
+      - key: OPENAI_API_KEY
+        sync: false
