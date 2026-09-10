@@ -19,10 +19,15 @@ const screenEl = document.getElementById("screen");
 const navEl = document.getElementById("bottomNav");
 const settingsBtnEl = document.getElementById("settingsBtn");
 
+// Hosted backend — the installed iOS/Android app talks to this by default so it
+// works on first launch. Override in Settings (e.g. http://localhost:3001 for
+// local dev, or a LAN address like http://192.168.1.20:3001).
+const DEFAULT_NATIVE_API_BASE = "https://restock-radar-evch.onrender.com";
+
 function apiBase() {
   const saved = localStorage.getItem("restockApiBase");
   if (saved !== null) return saved.replace(/\/$/, "");
-  return isNative ? "http://localhost:3001" : "";
+  return isNative ? DEFAULT_NATIVE_API_BASE : "";
 }
 const isNative = Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
@@ -592,7 +597,7 @@ function renderSettings() {
         <h3>Backend server address</h3>
         <p class="footnote" style="margin-top:0">${
           isNative
-            ? "Running as an installed app — defaults to http://localhost:3001 (works over USB with `adb reverse tcp:3001 tcp:3001`). Point this at your deployed backend URL to test from any network."
+            ? `Running as an installed app — defaults to the hosted backend (${DEFAULT_NATIVE_API_BASE}). Change this only to point at a local or different backend.`
             : "Running in a browser — leave blank to use this same site's /api routes. Only needed if the backend is hosted elsewhere."
         }</p>
         <input id="apiBaseInput" type="text" placeholder="http://192.168.1.20:3001" value="${current.replace(/"/g, "&quot;")}" style="width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid var(--border); font-size:15px; margin-top:8px" />
