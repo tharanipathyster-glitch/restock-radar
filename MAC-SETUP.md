@@ -91,12 +91,45 @@ iPhone on the same Wi-Fi) → **Save**.
 
 ---
 
+## Sharing with friends to test
+
+**Goal: your iPhone + friends' iPhones, so they can test too.**
+
+### Option A — free Apple ID (you + friends physically present)
+
+Works, but with real limits:
+- The installed app **stops working after 7 days** — rebuild and reinstall to renew.
+- Each device must be **plugged into this Mac** to install (Xcode → select their
+  device → Run).
+- ~10 devices per 7-day window.
+
+Fine for yourself and a friend or two who can come by. Not practical for remote testing.
+
+### Option B — TestFlight (recommended for friends) — needs paid account
+
+Requires the **Apple Developer Program**, $99/year (enroll at
+<https://developer.apple.com/programs/enroll/>). Then friends install with just a link —
+no cable, no 7-day expiry (builds last 90 days), automatic updates.
+
+Setup, once enrolled:
+
+1. In Xcode → **Signing & Capabilities**, set **Team** to the paid account.
+2. Device dropdown → **Any iOS Device (arm64)**.
+3. **Product → Archive**. When the Organizer opens: **Distribute App → TestFlight (Internal Only)** → **Upload**.
+4. Go to <https://appstoreconnect.apple.com> → **My Apps** → the app → **TestFlight** tab.
+5. Add a build to **Internal Testing** (up to 100 people, instant) — or create an
+   **External** group to get a shareable public link (one-time ~24h Apple review of
+   the first build).
+6. Friends: install **TestFlight** from the App Store → open your invite link → Install.
+
+To push an update: bump the build number, `npx cap sync ios`, Archive, Upload again.
+
 ## Going further (later)
 
 - **App icon / splash**: replace assets in `ios/App/App/Assets.xcassets`, or use
   `@capacitor/assets` to generate them from a single source image.
-- **TestFlight / App Store**: needs a paid **Apple Developer Program** membership
-  ($99/year). In Xcode: **Product → Archive** → **Distribute App**.
+- **App Store public release**: paid account + app review, screenshots, privacy
+  disclosures. In Xcode: **Product → Archive → Distribute App → App Store Connect**.
 - **Native "open POS terminal" button**: currently uses `window.open`; on iOS this
   wants the `@capacitor/browser` plugin for a clean in-app browser.
 
